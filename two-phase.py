@@ -370,7 +370,7 @@ if Process == 'Planning':
         AbsoluteDueDate[i-1]= int(round((AbsoluteDueDate[i-1]/8.0)+0.4999))
         DesiredDueDate[i-1]= int(round((DesiredDueDate [i-1]/8.0) +0.4999))
         for j in J[i]:
-            if Duration[i-1][j-1] <>0:
+            if Duration[i-1][j-1]!=0:
                 DP.append(Duration[i-1][j-1]/8.0)
                 Arrival[i-1][j-1]=int(round((Arrival[i-1][j-1]/8.0)+0.4999))
                 for m in M:
@@ -398,6 +398,7 @@ def LFP (n,j) :
             temp = LFP(n,k) - DurationPortion[n][k]
             if temp < TempU : TempU = temp
     return TempU
+
 n = 0
 u= [[] for x in xrange (len(P))]
 while n<len(P):
@@ -405,180 +406,169 @@ while n<len(P):
         u[n].append (int( round (LFP(n,j)+0.4999) ) )
     n+=1
 
-def EFP (n,j) :
-Templl = Arrival [n][j] + DurationPortion [n][j]
-for k in range (P[n +1]) :
-if Precedence [n][j][k ]==1:
-temp = EFP(n,k) - DurationPortion [n][k] + ( DurationPortion [n][k
-]/
-Batch [n][k]) + DurationPortion [n][j]
-tempp = EFP(n,k) + DurationPortion [n][j]/ Batch [n][j]
-if temp > Templl :
-Templl = temp
-if tempp > Templl : Templl = tempp
-else :
-if tempp > Templl :
-69
-Templl = tempp
-return Templl
+def EFP(n,j):
+    Templl = Arrival [n][j] + DurationPortion [n][j]
+    for k in range (P[n +1]) :
+        if Precedence[n][j][k]==1:
+            temp = EFP(n,k)-DurationPortion[n][k]+(DurationPortion[n][k]/Batch[n][k])+DurationPortion[n][j]
+            tempp = EFP(n,k) + DurationPortion [n][j]/ Batch [n][j]
+            if temp > Templl:
+                Templl = temp
+            if tempp > Templl: Templl = tempp
+        else :
+            if tempp > Templl:
+                Templl = tempp
+    return Templl
+
 n = 0
 l= [[] for x in xrange (len(P) )]
 while n<len(P):
-for j in range (P[n +1]) :
-l[n]. append (int( round (EFP(n,j) +0.4999) ) )
+    for j in range (P[n +1]) :
+        l[n].append(int(round(EFP(n,j)+0.4999) ) )
 n+=1
 for i in I:
 deletlist =[]
-for j in range ( Project [i -1]) :
-if RS[i -1][ j ]==0:
-for k in range ( Project [i -1]) :
-Precedence [i -1][ k][j]=0
-for z in range ( Project [i -1]) :
-Precedence [i -1][ j][z]=0
-if Process == ’ Planning ’:
-EFP (i -1 ,k)
-l[i -1][ k]= int( round (EFP(i -1 ,k) +0.4999) )
-LFP (i -1 ,k)
-u[i -1][ k]= int( round (LFP(i -1 ,k) +0.4999) )
-else :
-EF(i -1 ,k)
-l[i -1][ k]= int( round (EF(i -1 ,k) +0.4999) )
-LF(i -1 ,k)
-u[i -1][ k]= int( round (LF(i -1 ,k) +0.4999) )
-deletlist . append (j+1)
-else :
-continue
-for x in deletlist :
-J[i]. remove (x)
-70
+    for j in range(Project[i-1]) :
+        if RS[i-1][j]==0:
+            for k in range(Project[i-1]) :
+                Precedence [i-1][k][j]=0
+                for z in range (Project[i-1]) :
+                    Precedence[i-1][j][z]=0
+                    if Process == 'Planning':
+                        #EFP(i-1 ,k)
+                        l[i-1][k]= int(round(EFP(i-1 ,k)+0.4999))
+                        #LFP (i-1 ,k)
+                        u[i-1][k]= int(round(LFP(i-1 ,k)+0.4999))
+                    else :
+                        #EF(i -1 ,k)
+                        l[i-1][k]=int(round(EF(i-1,k) +0.4999))
+                        #LF(i -1 ,k)
+                        u[i-1][k]= int(round(LF(i-1 ,k)+0.4999) )
+            deletlist.append (j+1)
+        else :
+            continue
+for x in deletlist:
+    J[i].remove(x)
+
 # print ’ Latest Finish ’
 # print u
 # print ’ Earliest Finish ’
 # print l
 for i in I:
-if len (J[i]) <=P[i]:
-P[i]= len(J[i])
-else :
-continue
+    if len(J[i])<=P[i]:
+        P[i]= len(J[i])
+    else:
+        continue
+    
 deletjob =[]
 for i in I:
-if not J[i]:
-deletjob . append (i)
+    if not J[i]:
+        deletjob.append(i)
 for x in deletjob :
-I. remove (x)
-if Process == ’ Planning ’:
+    I.remove (x)
+    if Process =='Planning':
 for i in I:
-for j in J[i]:
-if LFC [i -1][j -1] >0:
-LFC [i -1][j -1]= round (LFC [i -1][j -1]/8+0.4999)
-if LFC [i -1][j -1] <=u[i -1][j -1]:
-u[i -1][j -1]= int(LFC[i -1][j -1])
-if Process <>’ Planning ’:
+    for j in J[i]:
+        if LFC[i-1][j-1]>0:
+            LFC [i-1][j-1]= round(LFC[i-1][j-1]/8+0.4999)
+        if LFC[i-1][j-1] <=u[i-1][j-1]:
+            u[i-1][j-1]= int(LFC[i-1][j-1])
+
+if Process !='Planning':
 for i in I:
-for j in J[i]:
-if LF(i -1 ,j -1) >0:
-if LF(i -1 ,j -1) <=u[i -1][j -1]:
-u[i -1][j -1]= int(LF(i -1 ,j -1) )
+    for j in J[i]:
+        if LF(i-1 ,j-1) >0:
+            if LF(i-1 ,j-1) <=u[i-1][j-1]:
+                u[i-1][j-1]= int(LF(i-1 ,j-1) )
 ADD =[]
 for i in I:
-ADD . append ( AbsoluteDueDate [i -1])
-71
-print ’* DATA ARE IMPORTED ... ’
+    ADD.append(AbsoluteDueDate[i-1])
+
+    print('* DATA ARE IMPORTED ... ')
 # earliest possible period in which project i could be completed
 ee =[]
 for i in I:
-x=[]
-for j in J[i]:
-x. append (l[i -1][j -1])
-eee =max (x)
-ee. append (eee )
-e= dict (zip(I,ee))
+    x=[]
+    for j in J[i]:
+        x. append (l[i -1][j -1])
+        eee =max (x)
+        ee. append (eee)
+e=dict(zip(I,ee))
 # priority of project i
-w= dict (zip(I, Weight ))
+w= dict(zip(I, Weight ))
 # time interval 1
-T= dict (zip(I ,( range (min( Arrival [i -1]) , AbsoluteDueDate [i -1]+1)
-for i in I)) )
+T= dict(zip(I,(range(min(Arrival[i-1]),AbsoluteDueDate[i-1]+1) for i in I)))
 # time interval 2
-T2= range (0 , max (ADD ) +1)
+T2=range(0,max(ADD)+1)
 # time interval 3
 T3= {}
 for i in I:
-for j in J[i]: T3[i,j]= range (l[i -1][j -1] ,u[i -1][j -1]+1)
+    for j in J[i]:T3[i,j]=range(l[i-1][j-1] ,u[i-1][j-1]+1)
 # time interval 4
 T4 ={}
 for i in I:
-72
-for j in J[i]: T4[i,j]= range (l[i -1][j -1] , AbsoluteDueDate [i
--1]+1)
+    for j in J[i]: T4[i,j]= range(l[i-1][j-1] , AbsoluteDueDate[i-1]+1)
 # time interval 5
 T5 ={}
 for i in I:
-for j in J[i]: T5[i,j]= range (l[i -1][j -1] ,u[i -1][j -1]+1)
+    for j in J[i]: T5[i,j]= range(l[i-1][j-1] ,u[i-1][j-1]+1)
 # time interval 6
 TeG ={}
-for i in I: TeG [i]= range (e[i] , AbsoluteDueDate [i -1]+1)
+for i in I: TeG [i]= range(e[i], AbsoluteDueDate[i -1]+1)
 # time interval 7
 Tal ={}
 for i in I:
-for j in J[i]: Tal [i,j]= range ( Arrival [i -1][j -1] ,l[i -1][j -1])
+    for j in J[i]: Tal[i,j]= range(Arrival[i-1][j-1] ,l[i-1][j-1])
 # time interval 8
 TuG ={}
 for i in I:
-for j in J[i]: TuG [i,j]= range (u[i -1][j -1]+1 , AbsoluteDueDate [i
--1]+1)
+    for j in J[i]: TuG[i,j]=range(u[i-1][j-1]+1 , AbsoluteDueDate[i-1]+1)
 # time interval 9
-T1e = dict (zip (I ,( range (min ( Arrival [i -1]) ,e[i]) for i in I)) )
+T1e = dict(zip(I,(range(min(Arrival[i -1]) ,e[i]) for i in I)) )
 R={}
 for m in M:
-for t in T2: R[m,t]=1
+    for t in T2: R[m,t]=1
 V={}
 for o in O:
-for t in T2: V[o,t]=1
-73
+    for t in T2: V[o,t]=1
+
 # desired due date for project i
-g= dict (zip(I ,(( DesiredDueDate [i -1]) for i in I) ))
-# a variavle which is 1 if job j in project i is completed in
-period t ,
-0 otherwise
+g=dict(zip(I,((DesiredDueDate[i-1]) for i in I) ))
+
+# a variable which is 1 if job j in project i is completed in
+#period t ,0 otherwise
 x={}
-for i in I: x[i] = LpVariable . dicts (’x ’ ,(N[i -1] ,J[i] ,T[i]) ,0 ,1 ,
-LpInteger )
+for i in I: x[i] = LpVariable.dicts('x',(N[i-1] ,J[i] ,T[i]) ,0,1,LpInteger)
+
 # a variable which is 1 in period t if all jobs of project i
-have been
-comlpeted , 0 otherwise
+#have been comlpeted , 0 otherwise
 h={}
-for i in I: h[i] = LpVariable . dicts (’h ’ ,(N[i -1] , TeG[i]) ,0 ,1 ,
-LpInteger )
+for i in I: h[i] = LpVariable.dicts('h',(N[i -1],TeG[i]),0,1,LpInteger)
+
 # a varibale which is 1 within a duration of job j in project i
 zz ={}
-for i in I: zz[i] = LpVariable . dicts (’ zz ’ ,(N[i -1] ,J[i],T[i])
-,0 ,1 , LpInteger )
+for i in I: zz[i] = LpVariable.dicts('zz',(N[i-1],J[i],T[i]),0,1,LpInteger)
+
 # a variable which is 1 if mach
-74
-for i in I: W[i] = LpVariable . dicts (’W ’ ,(N[i -1] ,J[i] ,O) ,0 ,1 ,
-LpInteger )
+for i in I: W[i] = LpVariable.dicts ('W' ,(N[i -1],J[i],O),0,1,LpInteger)
+
 # a variable which is used to assisst constraint 5
 QS ={}
-for i in I: QS[i] = LpVariable . dicts (’ QS ’ ,(N[i -1] ,J[i] ,M,T[i])
-,0 ,1 , LpInteger )
+for i in I: QS[i]=LpVariable.dicts('QS' ,(N[i -1] ,J[i],M,T[i]),0,1,LpInteger)
+
 # a variable which is used to assisst constraint 6
 QW ={}
-for i in I: QW[i] = LpVariable . dicts (’ QW ’ ,(N[i -1] ,J[i] ,O,T[i])
-,0 ,1 ,
-LpInteger )
+for i in I: QW[i] = LpVariable . dicts ('QW' ,(N[i-1],J[i],O,T[i]),0,1,LpInteger)
+
 # a variable which is 1 during the period that a setup for a
-step is
-completed but the processing has not been
-started yet - This is only used for machine utilization
+#step is completed but the processing has not been
+#started yet - This is only used for machine utilization
 zzs ={}
-for i in I: zzs[i] = LpVariable . dicts (’ zzs ’ ,(N[i -1] ,J[i] ,T[i])
-,0 ,1
-,LpInteger )
+for i in I: zzs[i] = LpVariable.dicts('zzs',(N[i-1],J[i],T[i]),0,1,LpInteger )
+
 # a variable which is 1 if a machine is utilized during a period
-defined for zzs
+#defined for zzs
 QQS ={}
-for i in I: QQS[i] = LpVariable . dicts (’ QQS ’ ,(N[i -1] ,J[i] ,M,T[i])
-,0 ,1 , LpInteger )
-Time_Start = time . clock ()
-print ’* VARIABLES ARE GENERATED , THE MODEL IS BEING PROCESSED ...
-’,’ ## ’,Process ,’ ## ’
+for i in I: QQS[i] = LpVariable.dicts('QQS',(N[i-1],J[i],M,T[i]),0,1,LpInteger )
+Time_Start = time.clock()
+print ('* VARIABLES ARE GENERATED , THE MODEL IS BEING PROCESSED ...',' ## ',Process ,' ##') 
