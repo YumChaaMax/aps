@@ -427,7 +427,7 @@ while n<len(P):
         l[n].append(int(round(EFP(n,j)+0.4999) ) )
 n+=1
 for i in I:
-deletlist =[]
+    deletlist =[]
     for j in range(Project[i-1]) :
         if RS[i-1][j]==0:
             for k in range(Project[i-1]) :
@@ -467,19 +467,19 @@ for i in I:
 for x in deletjob :
     I.remove (x)
     if Process =='Planning':
-for i in I:
-    for j in J[i]:
-        if LFC[i-1][j-1]>0:
-            LFC [i-1][j-1]= round(LFC[i-1][j-1]/8+0.4999)
-        if LFC[i-1][j-1] <=u[i-1][j-1]:
-            u[i-1][j-1]= int(LFC[i-1][j-1])
+        for i in I:
+            for j in J[i]:
+                if LFC[i-1][j-1]>0:
+                    LFC [i-1][j-1]= round(LFC[i-1][j-1]/8+0.4999)
+                if LFC[i-1][j-1] <=u[i-1][j-1]:
+                    u[i-1][j-1]= int(LFC[i-1][j-1])
 
-if Process !='Planning':
-for i in I:
-    for j in J[i]:
-        if LF(i-1 ,j-1) >0:
-            if LF(i-1 ,j-1) <=u[i-1][j-1]:
-                u[i-1][j-1]= int(LF(i-1 ,j-1) )
+    if Process !='Planning':
+        for i in I:
+            for j in J[i]:
+                if LF(i-1 ,j-1) >0:
+                    if LF(i-1 ,j-1) <=u[i-1][j-1]:
+                        u[i-1][j-1]= int(LF(i-1 ,j-1))
 ADD =[]
 for i in I:
     ADD.append(AbsoluteDueDate[i-1])
@@ -495,7 +495,7 @@ for i in I:
         ee. append (eee)
 e=dict(zip(I,ee))
 # priority of project i
-w= dict(zip(I, Weight ))
+w= dict(zip(I, Weight))
 # time interval 1
 T= dict(zip(I,(range(min(Arrival[i-1]),AbsoluteDueDate[i-1]+1) for i in I)))
 # time interval 2
@@ -572,3 +572,421 @@ QQS ={}
 for i in I: QQS[i] = LpVariable.dicts('QQS',(N[i-1],J[i],M,T[i]),0,1,LpInteger )
 Time_Start = time.clock()
 print ('* VARIABLES ARE GENERATED , THE MODEL IS BEING PROCESSED ...',' ## ',Process ,' ##') 
+
+       
+# ----- Objective Function -----#
+# a project is late if it is completed after the desired due -
+#date , g[i]
+prob += (sum(w[i]*((t-g[i])*h[i][i][t]) for i in I for t in TeG[i] if t >=g[i]+1)+sum(0.01*w[i]*h[i][i][t]*t for i in I for t in TeG[i]))
+# ----- Subject To -----#
+for i in I:
+#job completion constraint 1
+    prob += sum(h[i][i][t] for t in TeG [i]) == 1
+# prob += sum(h[i][i][t] for t in T1e[i]) == 0
+    for j in J[i]:
+    # step completion constraint
+        prob += sum(x[i][i][j][t] for t in T3[i,j] ) == 1
+        prob += sum(x[i][i][j][t] for t in TuG[i,j]) == 0
+        prob += sum(x[i][i][j][t] for t in Tal[i,j]) == 0
+        if CC[i-1][j-1] >0:
+            B = CC[i-1][j-1]
+            prob += x[i][i][j][B]==1
+# step duration
+        for t in T[i]:
+            prob += sum(x[i][i][j][t1] for t1 in T[i] if t1 >=t if t1 < t+ Duration[i -1][j -1] if t1 <= AbsoluteDueDate[i-1]) == zz[i][i][j][t]
+    # prob += sum(zz[i][i][j][t] for t in T[i] if t >= AbsoluteDueDate
+    #[i -1]+1)
+    #== 0
+
+# prob += sum(zz[i][i][j][t] for t in Tal[i,j] if Duration [i -1][j
+#-1] <t-
+#Duration [i -1][j -1]) == 0
+# machine constraint auxilary
+        prob += sum( MachineReq[i-1][j-1][m-1] for m in M) >= sum(S[i][i][j][m] for m in M)
+        prob += sum( MachineReq[i-1][j-1][m-1] for m in M) <= sum (S[i][i][j][m] for m in M)* Machine
+        prob += sum(S[i][i][j][m] for m in M) <= 1
+        for m in M:
+            prob += S[i][i][j][m] <= MachineReq [i-1][j-1][m-1]
+            for t in T[i]:
+                prob += zz[i][i][j][t]+S[i][i][j][m]-QS[i][i][j][m][t]*2 <= 1
+                prob += zz[i][i][j][t]+S[i][i][j][m]-QS[i][i][j][m][t]*2 >= 0
+    # machine constraint during a period , starting from setup
+    #completion up to a begining of a corresponding processing
+                prob += zzs[i][i][j][t]+S[i][i][j][m] - QQS [i][i][j][m][t]*2 <=1
+                prob += zzs[i][i][j][t]+S[i][i][j][m] - QQS [i][i][j][m][t]*2 >=0
+        if MC[i-1][j-1] >0:
+            Y = MC[i-1][j-1]
+            prob += S[i][i][j][Y]==1
+
+# operator constraint auxilary
+        prob += sum(OperatorReq[i-1][j-1][o-1] for o in O) >= sum(W[i][i][j][o] for o in O)
+        prob += sum(OperatorReq[i-1][j-1][o-1] for o in O) <= sum(W[i][i][j][o]for o in O)*Operator
+
+        prob += sum(W[i][i][j][o] for o in O) <= 1
+        
+        for o in O:
+            prob += W[i][i][j][o] <= OperatorReq [i-1][j-1][o-1]
+        for t in T[i]:
+            prob += zz[i][i][j][t]+W[i][i][j][o] - QW[i][i][j][o][t]*2 <= 1
+            prob += zz[i][i][j][t]+W[i][i][j][o] - QW[i][i][j][o][t]*2 >= 0
+
+        if OC[i-1][j-1] >0:
+            B = OC[i-1][j-1]
+            prob += W[i][i][j][B]==1
+    # cycle must be assigned to a machine that is assigned to its
+    #corresponding setup
+    for j in J[i]:
+        if j%2 !=0:
+            if j+1 in J[i]:
+                for m in M:
+                    prob += S[i][i][j][m]== S[i][i][j+1][ m]
+# Machine constraint during the period in which the setup of a
+#step is completed but the cycle has not been started yet
+    for j in J[i]:
+        if j%2 != 0:
+            if j+1 in J[i]:
+                for t in T[i]:
+                    if Process == 'Planning':
+                        if l[i-1][j-1]== l[i-1][j]:
+                            prob += (sum(x[i][i][j][t1] for t1 in T[i] if t1 >=l[i -1][j -1] if t1 <=t)-sum\
+                                     (x[i][i][j+1][t1] for t1 in T[i] if t1 >=l[i-1][j] if t1 <=t+Duration [i -1][ j]))== zzs[i][i][j][t]
+                        else:
+                            prob += ( sum(x[i][i][j][ t1] for t1 in T[i] if t1 >=l[i -1][j -1] if\
+                                          t1 <t)-sum(x[i][i][j +1][ t1] for t1 in T[i] if t1 >=l[i -1][j -1] if t1 \
+                                               <t+Duration[i-1][j]))== zzs[i][i][j][t]
+            else:
+                prob += sum(x[i][i][j][t1] for t1 in T[i] if t1 >=l[i-1][j-1] if t1 <t)-sum(x[i][i][j +1][ t1] for t1 in T[i] \
+                           if t1 >l[i -1][j -1] if t1 <t+Duration [i-1][j]) == zzs[i][i][j][t]
+# project completion constraint 2
+    for t2 in TeG [i]:
+        prob += sum(x[i][i][j][t] for j in J[i] for t in T3[i,j] if t <= t2) >= (h[i][i][t2])*P[i]
+# Sequencing constraint
+#for j1 in J[i]:
+# for j2 in J[i]:
+# prob += Precedence [i -1][ j1 -1][ j2 -1]*( sum(t*x[i][i][ j2 ][
+#t] for t in T5[i,j2 ])
+#+ Duration [i -1][ j1 -1]) <= sum(t*x[i][i][ j1 ][t] for t in T5[i,j1 ])
+    for j1 in J[i]:
+        for j2 in J[i]:
+            if Process == 'Planning':
+# prob += Precedence [i -1][ j1 -1][ j2 -1]*( sum(t*x[i][i][ j2 ][t] for t
+#in T5[i,j2 ]) -D
+#uration [i -1][ j2 -1]+ DurationPortion [i -1][ j2 -1]) <=sum (t*x[i][i][ j1
+#][t] for t in T5[i,j1 ]) - DurationPortion [i -1][ j1 -1]
+
+                prob += Precedence [i-1][j1-1][j2-1]*(sum(t*x[i][i][j2][t] for t
+                                   in T5[i,j2 ]) -Duration [i-1][j2-1]+(DurationPortion[i-1][j2-1]\
+                                Batch[i -1][j2 -1]))<= sum(t*x[i][i][j1 ][t] for t in T5[i,j1])\
+                                   - DurationPortion[i-1][j1-1]
+               prob += Precedence [i -1][ j1 -1][ j2 -1]*( sum (t*x[i][i][ j2 ][t] for t
+in T5[i,j2 ]) -Duration [i -1][ j2 -1]+ DurationPortion [i -1][ j2 -1]+(
+DurationPortion [i -1][ j1 -1]/ Batch [i -1][ j1 -1]) )
+<= sum(t*x[i][i][ j1 ][t] for t in T5[i,j1 ])
+else :
+prob += Precedence [i -1][ j1 -1][ j2 -1]*( sum (t*x[i][i][ j2 ][t] for t
+in T5[i,j2 ])
+-Duration [i -1][ j2 -1]+( Duration [i -1][ j2 -1]/ Batch [i -1][ j2 -1]) ) <=
+sum (t*x[i][i][ j1 ][t]
+for t in T5[i,j1 ]) -Duration [i -1][ j1 -1]
+prob += Precedence [i -1][ j1 -1][ j2 -1]*( sum (t*x[i][i][ j2 ][t] for t
+in T5[i,j2 ])+
+( Duration [i -1][ j1 -1]/ Batch [i -1][ j1 -1]) )
+<= sum(t*x[i][i][ j1 ][t] for t in T5[i,j1 ])
+# machine and operator constraint
+for t in T2:
+for m in M:
+prob += ( sum(QS[i][i][j][m][t]* Mpu [i -1][j -1][m -1] for i in I for
+j in J[i] if t in T[i])+
+sum(QQS[i][i][j][m][t]for i in I for j in J[i] if t in T[i])) <=
+R[m,t]
+for o in O:
+prob += sum(QW[i][i][j][o][t]* Opu [i -1][j -1][o -1] for i in I for
+j in J[i] if t in T[i]) <= V[o,t]
+# prob . writeLP (" OptimizationProblem .lp ")
+80
+# Gurobi Solver
+print '*LP MODEL IS GENERATED ---- Solver : GUROBI '
+solvers . GUROBI_CMD ( path =None , keepFiles =0, mip =1, msg =1, options =[])
+. solve ( prob )# options =
+['TimeLimit =10 ']). solve ( prob )
+# GLPK Solver
+# solvers . GLPK_CMD ( path =None , keepFiles =0, mip =1, msg =1, options =[]) .
+solve ( prob )# options =
+['TimeLimit =10 ']). solve ( prob )
+# COIN Solver
+# print 'Solver : COIN '
+# prob . solve ()
+print (" Status :", LpStatus [ prob . status ])
+print (" Objective = ", value ( prob . objective ))
+Time_Elapsed = ( time . clock () - Time_Start )
+print 'Computation Time ', Time_Elapsed
+if LpStatus [ prob . status ]== 'Not Solved ':
+# print 'The model could not provide a feasible solution '
+sys . exit ("The model could not provide a feasible solution ")
+print ""
+JobCompletion = ""
+print "#JOB COMPLETION TIME #"
+for i in I:
+JobCompletion = JobCompletion + "Job "+ repr (i)+" Completion_Time
+:"
+for t in TeG [i]:
+if h[i][i][t]. value () ==1:
+JobCompletion = JobCompletion + str(t)
+81
+else :
+continue
+print JobCompletion
+JobCompletion = ""
+print ""
+CompletionTime = ""
+print "# STEP COMPLETION TIME #"
+for i in I:
+print " **** Job "+ repr (i)+" **** "
+for j in J[i]:
+CompletionTime = " Step "+ repr (j)+": "
+for t in T[i]:
+if x[i][i][j][t]. value () ==1:
+CompletionTime = CompletionTime +str (t)
+else :
+continue
+print CompletionTime
+CompletionTime = ""
+print ""
+ProcessingPeriods = ""
+print "#JOB PROCESSING PERIODS #"
+for i in I:
+print " **** Job "+ repr (i)+" **** "
+for j in J[i]:
+ProcessingPeriods = ProcessingPeriods +" Step "+ repr (j)+": "+"(
+"
+for t in T[i]:
+if zz[i][i][j][t]. value () ==1:
+82
+ProcessingPeriods = ProcessingPeriods + str(t)+" "
+else :
+continue
+ProcessingPeriods = ProcessingPeriods + ")"
+print ProcessingPeriods
+ProcessingPeriods = ""
+print ""
+MachineUsagePeriod = ""
+print "# Machine USAGE PERIOD #"
+for m in M:
+print " **** Machine "+ repr (m)+" **** "
+print " Job - step - period "
+for t in T2:
+for i in I:
+if t in T[i]:
+for j in J[i]:
+if QS[i][i][j][m][t]. value () ==1 or QQS [i][i][j][m][t]. value ()
+==1:
+print " "+str(i)+" "+str(j)+" "+str(t)
+MachineUsagePeriod ="1"
+else :
+continue
+if MachineUsagePeriod =="":
+print "*** Machine "+ repr (m)+" was not used AT ALL ***"
+else :
+MachineUsagePeriod = ""
+print ""
+OperatorUsagePeriod = ""
+83
+print "# OPERATOR USAGE PERIOD #"
+for o in O:
+print " **** Operator "+ repr (o)+" **** "
+print " Job - step - period "
+for t in T2:
+for i in I:
+if t in T[i]:
+for j in J[i]:
+if QW[i][i][j][o][t]. value () ==1:
+print " "+str(i)+" "+str(j)+" "+str(t)
+OperatorUsagePeriod ="1"
+else :
+continue
+if OperatorUsagePeriod =="":
+print "*** Operator "+ repr (o)+" was not used AT ALL ***"
+else :
+OperatorUsagePeriod = ""
+## GanttChart ##
+Identitylist =[]
+numpylist =[]
+for i in I:
+for j in J[i]:
+for t in T[i]:
+if zz[i][i][j][t]. value () ==1:
+steplist =[]
+steplist . append (i +0.05* j)
+steplist . append (j)
+steplist . append (t -1)
+steplist . append (t)
+Identitylist . append (str (i)+"-"+str (j))
+numpylist . append ( steplist )
+84
+else :
+continue
+# print 'numpylist ', numpylist
+ganttchart =np. array ( numpylist )
+np. savetxt (" ganttchart .csv ", ganttchart , delimiter =",")
+np. savetxt (" numpylist .csv ", numpylist , delimiter =",")
+file = open (" Identitylist .txt ", "w")
+for item in Identitylist :
+file . write ("%s\n" % item )
+file . close ()
+plt . ylim (0, max (I)+1)
+color = ['r', 'b', 'g', 'k', 'm', 'c', 'y']
+color_mapper = np. vectorize ( lambda x: {1: 'r', 2: 'b', 3: 'g',
+4: 'm', 5: 'c', 6: 'y', 7:
+'r', 8: 'b', 9: 'g', 10: 'k', 11: 'm', 12: 'c', 13: 'y' ,14: 'k'}. get (x)
+)
+plt . hlines ( ganttchart [: ,0] , ganttchart [: ,2] , ganttchart [: ,3] ,
+colors = color_mapper
+( ganttchart [: ,1]) ,linewidth =5)
+plt . title ('Jobs vs. Time ')
+plt . ylabel ('Jobs ')
+if Process == 'Planning ':
+plt . xlabel ('Time ( days )')
+else :
+plt . xlabel ('Time ( hours )')
+85
+#plt. locator_params (' both ',1)
+plt . yticks ( range (0, max (I)+1) )
+plt . minorticks_on ()
+plt . tick_params ( axis = 'both ', which = 'major ', labelsize = 10)
+#plt. set_major_formatter ( majorFormatter )
+x1 =0
+x2 =1
+x3 =2
+x4 =3
+n=0
+while n<len( numpylist ):
+x5= float ( numpylist [n][ x3 ]+ numpylist [n][ x4 ]) /2
+plt. text (x5 , numpylist [n][ x1], Identitylist [n])
+n+=1
+plt. show ()
+###
+Identitymachine =[]
+numpymachine =[]
+for m in M:
+for i in I:
+for j in J[i]:
+for t in T[i]:
+if QS[i][i][j][m][t]. value () ==1:
+steplist =[]
+steplist . append (i)
+steplist . append (j)
+steplist . append (m +0.05* i)
+steplist . append (t -1)
+steplist . append (t)
+86
+Identitymachine . append (str(i)+"-"+str(j))
+numpymachine . append ( steplist )
+else :
+continue
+# print 'numpymachine ', numpymachine
+ganttchartm =np. array ( numpymachine )
+np. savetxt (" ganttchartm .csv ", ganttchartm , delimiter =",")
+np. savetxt (" numpymachine .csv ", numpymachine , delimiter =",")
+file = open (" Identitymachine .txt ", "w")
+for item in Identitymachine :
+file . write ("%s\n" % item )
+file . close ()
+plt . yticks ( range (len (M)+1) )
+plt . ylim (0, len (M)+2)
+plt . hlines ( ganttchartm [: ,2] , ganttchartm [: ,3] , ganttchartm [: ,4] ,
+linewidth =4, colors
+= color_mapper ( ganttchartm [: ,1]))
+plt . title ('Machine Utilization ')
+plt . ylabel ('Machine ')
+if Process == 'Planning ':
+plt . xlabel ('Time ( days )')
+else :
+plt . xlabel ('Time ( hours )')
+x1 =0
+x2 =1
+x3 =2
+x4 =3
+x5 =4
+87
+n=0
+while n<len( numpymachine ):
+x6= float ((( numpymachine [n][ x4 ]+ numpymachine [n][ x5 ]) /2) +0.05*
+numpymachine [n][ x2 ])
+plt . text (x6 , numpymachine [n][ x3], Identitymachine [n])
+n+=1
+plt . show ()
+###
+Identityoperator =[]
+numpyoperator =[]
+for o in O:
+for i in I:
+for j in J[i]:
+for t in T[i]:
+if QW[i][i][j][o][t]. value () ==1:
+steplist =[]
+steplist . append (i)
+steplist . append (j)
+steplist . append (o +0.05* i)
+steplist . append (t -1)
+steplist . append (t)
+Identityoperator . append (str(i)+"-"+str(j))
+numpyoperator . append ( steplist )
+else :
+continue
+# print ' numpyoperator ', numpyoperator
+ganttcharto =np. array ( numpyoperator )
+np. savetxt (" ganttcharto .csv ", ganttcharto , delimiter =",")
+np. savetxt (" numpyoperator .csv ", numpyoperator , delimiter =",")
+88
+file = open (" Identityoperator .txt ", "w")
+for item in Identityoperator :
+file . write ("%s\n" % item )
+file . close ()
+# color_mapper = np. vectorize ( lambda x: {1: 'red ', 2: 'blue ', 3:
+'green '}. get (x))
+plt . yticks ( range (len (O)+1) )
+plt . ylim (0, len (O)+2)
+plt . hlines ( ganttcharto [: ,2] , ganttcharto [: ,3] , ganttcharto [: ,4] ,
+linewidth =4,
+colors = color_mapper ( ganttcharto [: ,1]) )
+plt . title ('Operator Utilization ')
+plt . ylabel ('Operator ')
+if Process == 'Planning ':
+plt . xlabel ('Time ( days )')
+else :
+plt . xlabel ('Time ( hours )')
+x1 =0
+x2 =1
+x3 =2
+x4 =3
+x5 =4
+n=0
+while n<len( numpyoperator ):
+x6= float ((( numpyoperator [n][ x4 ]+ numpyoperator [n][ x5 ]) /2) +0.05*
+numpyoperator [n][ x2 ])
+plt . text (x6 , numpyoperator [n][ x3], Identityoperator [n])
+n+=1
+plt . show ()
+##if Process ==' Planning ':
+89
+## BusyPeriods =[]
+## SchedulingPeriod =[]
+## for t in T2:
+## SchedulingPeriod1 =[]
+## for i in I:
+## if t in T[i]:
+## for j in J[i]:
+## if zz[i][i][j][t]. value () ==1:
+## if t not in BusyPeriods :
+## BusyPeriods . append (t)
+## Schedule =[]
+## Schedule . append (str(i)+" -"+ str(j))
+## SchedulingPeriod1 . append ( Schedule )
+## SchedulingPeriod . append ( SchedulingPeriod1 )
+prevName = 'datanew .xls '
+if Process == 'Planning ':
+newName = ' datanewPlanning .xls '
+else :
+newName = ' datanewScheduling .xls '
+shutil . copyfile ( prevName , newName )
+print 'Computation Time ', Time_Elapsed       
