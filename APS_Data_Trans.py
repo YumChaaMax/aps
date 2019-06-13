@@ -215,7 +215,7 @@ def model_total_volume(production_speed:pd.DataFrame,d_day:pulp.LpAffineExpressi
     
     return tot_vol        
 
-def process_csum(Ccsum:pulp.LpInteger,order_spdid:pd.DataFrame):
+def process_csum(Ccsum:int,order_spdid:pd.DataFrame):
     """
         Ccsum: the amount of every line will process
         order_spdpid: a data frame that includes  day_process,num_by_day
@@ -296,4 +296,17 @@ def total_volume(production_speed:pd.DataFrame,d_day,order,line):
     return tot_vol   
 
 def total_vol_15(d_day,df,order,line):
-    return d_day*df[(df['order_id']==order)&(df['line_no']==line)]['spd_15']         
+    return d_day*df[(df['order_id']==order)&(df['line_no']==line)]['spd_15'] 
+
+def df_to_dict(df:pd.DataFrame,outkey,interkey,value):
+    rlt_dict={}
+    outi=df[outkey].unique().tolist()
+    for i in outi:
+        tempDict={}
+        tempdf=df[df[outkey]==i][[interkey,value]]
+        tempdf.index=tempdf[interkey]
+        intj=tempdf.index
+        for j in intj:
+            tempDict[j]=tempdf[value][j]
+        rlt_dict[i]=tempDict
+    return rlt_dict

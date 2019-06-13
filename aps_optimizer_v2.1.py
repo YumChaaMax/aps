@@ -18,12 +18,14 @@ import datetime
 prodline=pd.read_excel(r'./data/prod_line_info.xlsx',names=['line_no','line_desp','staff_num','work_hour'])
 prodline.index=prodline['line_no']
 prod_line=prodline.index.tolist()
+L=prod_line.copy()
 line_num=len(prod_line)
 #read working days referenc table
 #working_days=pd.read_excel(.columns=['work_dates','type'])
 plan_dates=['2019-04-20','2019-04-21','2019-04-22','2019-04-23','2019-04-24','2019-04-25']
 days=len(plan_dates)
-
+start='2019-4-20'
+buffer=5
 
 # standard work hours for each product line in the next week, suppose is defined as hour 
 #stdH=10*6
@@ -35,7 +37,9 @@ practice_pace=pd.read_excel(r"./data/practice_curve.xlsx",names=['uid','model_no
 
 
 #read order table actual and other predicted confirmed by production manager 
-rawPool=pd.read_excel(r'./data/orderPool.xlsx',names=['order_id','model_no','order_num','order_date','deli_date','order_type','priority','epst','deli_ahead'])
+rawPool=pd.read_excel(r'./data/orderPool.xlsx',names=['order_id','model_no','order_num',\
+                                                      'order_date','deli_date','order_type','priority','epst','deli_ahead'])
+
 rawPool.index=rawPool['order_id']
 #need to adjust the parameter (which could affect the deputy of order type)
 
@@ -48,6 +52,18 @@ rawPool.index=rawPool['order_id']
 ##transform and clean data，create order pool, practice matrice as input or reference data
 #order pool
 orderPool=rawPool.copy()
+#absolute epst when first plan_date is 0
+orderPool['absEpst']=orderPool['epst'].apply(lambda x:max((x-datetime.datetime.strptime(start,'%Y-%m-%d')).days,0))
+#absolute lpst when first plan_date is 0
+#orderPool['absLpst']=orderPool['deli_date'].apply(lambda x:(x-datetime.datetime.strptime(start,'%Y-%m-%d')).days)-orderPool['deli_ahead']+buffer
+orderPool['desLpst']=orderPool['deli_date'].apply(lambda x:(x-datetime.datetime.strptime(start,'%Y-%m-%d')).days)-orderPool['deli_ahead']
+orderPool['absLpst']=orderPool['desLpst']+buffer
+#orderPool['deli_date']-datetime.timedelta(days=orderPool['deli_ahead'])
+#orderPool['epst'].apply(lambda x:max((x-datetime.datetime.strptime(start,'%Y-%m-%d')).days,0))
+g=adt.df_to_dict(orderPool,'model_no','order_id','desLpst')
+
+# get min epst by models
+modelPool=orderPool.groupby('model_no')['order_num'].sum()
 
 
 
@@ -58,8 +74,46 @@ process_days=adt.process_day(orderPool,practice_pace,model_SAH,prodline)
 #unique order_no. and model_no.
 orderList=orderPool.index.tolist()
 modelList=orderPool['model_no'].unique().tolist()
-modelDict=orderPool[['model_no']].
+modelDict=orderPool[['model_no']].to_dict()['model_no']
 
+w={}
+for i in modelList:
+    temp_df=orderPool[orderPool['model_no']==i]
+    
+    tempdict={}
+    tOlist=temp_df.index
+    for j in tOlist:
+    
+        tempdict[j]=temp_df['priority'][j]
+        
+    w[i]=tempdict
+
+modelEP=orderPool.groupby(by='model_no')['absEpst'].min()
+modelLpst1=orderPool.groupby(by='model_no')['absLpst'].min()
+modelLpst2=orderPool.groupby(by='model_no')['absLpst'].max()
+
+T={}
+for i in modelList:
+    T[i]=range(modelEP[i],modelLpst2[i]+1)
+
+Md={}
+for k, v in modelDict.items():
+    if v in Md.keys():
+        #modelindex[v]=[]
+        Md[v].append(k)
+    else:
+        Md[v]=[k]
+
+N=dict([(modelList[i],i) for i in range(len(modelList))])
+
+#abslpst=orderPool[['model_no','order_id','absLpst']]
+
+#lpst={}
+#for i in modelList:
+    #tempDidt={}
+    #for j in orderList:
+        #tempDidt[j]=abslpst['absLpst'][j]
+       
 date_s=pd.Series(plan_dates)
 #practice matrix
 #practice_matrix=pd.DataFrame()
@@ -105,12 +159,37 @@ dp_matrix=adt.day_speed_df(practice_pace,model_SAH,prodline)
 order_spd=adt.order_speed_df(dp_matrix,orderPool)
 order_spd['cum_day']=order_spd.groupby(['order_id','line_no'])['num_by_day'].cumsum()
 
-#the problem variables
-#a variable which is one if the model i is completed in time t
+e={}
+for i in modelList:
+    temp_fst=pd.DataFrame(dp_matrix[dp_matrix['model_no']==i].groupby('day_process')['num_by_day'].sum())
+    temp_fst['day_process']=temp_fst.index
+    e[i]=adt.process_csum(modelPool[i],temp_fst)+modelEP[i]
+#fast speed
+#fst=dp_matrix.groupby(by=['model_no','day_process'])['num_by_day'].sum()
+
+#earlist model finish time
+Tm={}
+for i in modelList:
+    Tm[i]=range(round(e[i],0),modelLpst2[i]+1)
+
 x={}
+h={}
+LS={}
+zz ={}
 modeln=len(modelList)
 for i in range(modeln):
-    x[i]=
+    #a variable which is one if order j of the model i is completed in time t
+    x[i]=pulp.LpVariable('x',(N[i],Md[i],T[i]),0,1,pulp.LpInteger)
+    
+    # a variable which is 1 in period t if all orders of model i
+    #have been comlpeted , 0 otherwise
+    h[i]=pulp.LpVariable('h',(N[i],Tm[i]),0,1,pulp.LpInteger)
+    
+    #a variable which is 1 if the line is assigned
+    LS[i]=pulp.LpVariable('ls',(N[i],Md[i],L,T[i]),0,1,pulp.LpInteger)
+    
+    zz[i]=pulp.LpVariable('zz',(N[i),Md[i],T[i]),0,1,pulp.LpInteger)
+    
 #Csums=pulp.LpVariable.dicts("line_prod",(prod_line,orderList),0,None, pulp.LpInteger)
 #r=pulp.LpVariable.dicts("release",(prod_line,orderList),0)
 #compD=pulp.LpVariable.dicts("compDate",(prod_line,orderList),0)
@@ -118,14 +197,14 @@ for i in range(modeln):
 #Pday=pulp.LpVariable.dicts("Processdays",(prod_line,orderList),0)
 #AM=pulp.LpVariable.dicts('planAmountEveryorder',(prod_line,orderList,plan_dates),0)
 #Create the 'prob' variable to contain the problem data
-prob=pulp.LpProblem("The APS Problem",pulp.LpMaximize)
+prob=pulp.LpProblem("The APS Problem",pulp.LpMinimize)
 #prob=pulp.LpProblem("The APS Problem",pulp.LpMinimize)
 
 #objective function： consider order priority and leadtime
 #eps=1e-2 
 #lambda compD[l][o] if compD[l][o]<=len(plan_dates) else len(plan_dates)
 #adt.model_total_volume(order_spd[(order_spd['order_id']==o)&(order_spd['line_no']==l)][['day_process','num_by_day']],adt.prod_days(compD[l][o],len(plan_dates),r[l][o]),len(plan_dates))
-prob+=0
+prob+=sum(w[i][j]*(t-g[i][j])*h[i][i][j][t] for i in modelList for j in Md[i])
 #pulp.lpSum([orderPool['priority'][o]*orderPool['order_type'][o]*\
                   #Csums[l][o] for o in orderList for l in prod_line])
 
