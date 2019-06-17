@@ -23,6 +23,7 @@ line_num=len(prod_line)
 #read working days referenc table
 #working_days=pd.read_excel(.columns=['work_dates','type'])
 plan_dates=['2019-04-20','2019-04-21','2019-04-22','2019-04-23','2019-04-24','2019-04-25']
+
 days=len(plan_dates)
 start='2019-4-20'
 buffer=5
@@ -76,6 +77,15 @@ orderList=orderPool.index.tolist()
 modelList=orderPool['model_no'].unique().tolist()
 modelDict=orderPool[['model_no']].to_dict()['model_no']
 
+modelTot=orderPool.groupby('model_no')['order_num'].sum()
+modelSum={}
+for i in modelList:
+    modelSum[i]=modelTot[i]
+
+orderD=adt.df_to_dict(orderPool,'model_no','order_id','order_num')
+Oepst=adt.df_to_dict(orderPool,'model_no','order_id','absEpst')
+Olpst=adt.df_to_dict(orderPool,'model_no','order_id','desLpst')
+
 w={}
 for i in modelList:
     temp_df=orderPool[orderPool['model_no']==i]
@@ -96,6 +106,8 @@ T={}
 for i in modelList:
     T[i]=range(modelEP[i],modelLpst2[i]+1)
 
+
+
 Md={}
 for k, v in modelDict.items():
     if v in Md.keys():
@@ -103,6 +115,7 @@ for k, v in modelDict.items():
         Md[v].append(k)
     else:
         Md[v]=[k]
+
 
 N=dict([(modelList[i],i) for i in range(len(modelList))])
 
@@ -156,6 +169,10 @@ date_s=pd.Series(plan_dates)
 #orders=adt.table_to_Adict(ordertable,'product','order_num')
 #got day volume produced based on practice curve
 dp_matrix=adt.day_speed_df(practice_pace,model_SAH,prodline)
+
+#reform the speed to the form 
+
+
 order_spd=adt.order_speed_df(dp_matrix,orderPool)
 order_spd['cum_day']=order_spd.groupby(['order_id','line_no'])['num_by_day'].cumsum()
 
@@ -170,8 +187,39 @@ for i in modelList:
 #earlist model finish time
 Tm={}
 for i in modelList:
-    Tm[i]=range(round(e[i],0),modelLpst2[i]+1)
+    Tm[i]=range(int(e[i]),modelLpst2[i]+1)
 
+#learning df to learning dict
+P={}
+for i in modelList:
+    tempTable=dp_matrix[dp_matrix['model_no']==i]
+    tempm={}
+    for l in prod_line:
+       tempdf=tempTable[tempTable['line_no']==l][['day_process','num_by_day']]
+       a_dict={}
+       a_dict[0]=tempdf['day_process'].tolist()
+       a_dict[1]=tempdf['num_by_day'].tolist()
+       tempm[l]=a_dict
+    P[i]=tempm
+
+#same thing but in different form       
+Pv={}
+for i in modelList:
+    tempTable=dp_matrix[dp_matrix['model_no']==i]
+    tempm={}
+    for l in prod_line:
+       tempdf=tempTable[tempTable['line_no']==l][['day_process','num_by_day']]
+       tempdf.index=tempdf['day_process']
+       a_dict={}
+       loop=tempdf['day_process'].tolist()
+       for d in loop:
+           a_dict[d]=tempdf['num_by_day'][d]
+           
+       tempm[l]=a_dict
+    Pv[i]=tempm
+    
+    
+prob=pulp.LpProblem("The APS Problem",pulp.LpMinimize)
 x={}
 h={}
 LS={}
@@ -185,10 +233,15 @@ for i in range(modeln):
     #have been comlpeted , 0 otherwise
     h[i]=pulp.LpVariable('h',(N[i],Tm[i]),0,1,pulp.LpInteger)
     
-    #a variable which is 1 if the line is assigned
-    LS[i]=pulp.LpVariable('ls',(N[i],Md[i],L,T[i]),0,1,pulp.LpInteger)
+    #a variable which is 1 if the line is assigned to a model
+    LS[i]=pulp.LpVariable('ls',(N[i],L),0,1,pulp.LpContinuous)
     
-    zz[i]=pulp.LpVariable('zz',(N[i),Md[i],T[i]),0,1,pulp.LpInteger)
+    zz[i]=pulp.LpVariable('zz',(N[i],Md[i],T[i]),0,1,pulp.LpInteger)
+    
+    for l in prod_line: 
+        k[i]=pulp.LpVariable('k',(N[i],l,range(len(P[i][l][0])),0,1,pulp.LpContinuous)
+        
+    
     
 #Csums=pulp.LpVariable.dicts("line_prod",(prod_line,orderList),0,None, pulp.LpInteger)
 #r=pulp.LpVariable.dicts("release",(prod_line,orderList),0)
@@ -197,14 +250,14 @@ for i in range(modeln):
 #Pday=pulp.LpVariable.dicts("Processdays",(prod_line,orderList),0)
 #AM=pulp.LpVariable.dicts('planAmountEveryorder',(prod_line,orderList,plan_dates),0)
 #Create the 'prob' variable to contain the problem data
-prob=pulp.LpProblem("The APS Problem",pulp.LpMinimize)
 #prob=pulp.LpProblem("The APS Problem",pulp.LpMinimize)
 
 #objective function： consider order priority and leadtime
 #eps=1e-2 
 #lambda compD[l][o] if compD[l][o]<=len(plan_dates) else len(plan_dates)
 #adt.model_total_volume(order_spd[(order_spd['order_id']==o)&(order_spd['line_no']==l)][['day_process','num_by_day']],adt.prod_days(compD[l][o],len(plan_dates),r[l][o]),len(plan_dates))
-prob+=sum(w[i][j]*(t-g[i][j])*h[i][i][j][t] for i in modelList for j in Md[i])
+prob+=pulp.lpSum([w[i][j]*x[i][i][j][t] for i in modelList for j in orderList for t in T[i] if t>g[i][j]])+pulp.lpSum([k[i][i][l][0][m]*P[i][l][0][m]\
+                    for i in modelList for l in prod_line for m in range(P[i][l][0])])
 #pulp.lpSum([orderPool['priority'][o]*orderPool['order_type'][o]*\
                   #Csums[l][o] for o in orderList for l in prod_line])
 
@@ -214,19 +267,30 @@ prob+=sum(w[i][j]*(t-g[i][j])*h[i][i][j][t] for i in modelList for j in Md[i])
 #2. relationships between release date and due date
 #3. release date>=max(0,epst-plan_dates[0]) 
 #4.fixed sum across day and lines equal total num of orders
-for o in orderList:
+for i in modelList:
+    prob+=pulp.lpSum([LS[i][i][l] for l in prod_line])==1
+    prob+=pulp.lpSum([k[i][i][l][0][m]*P[i][l][0][m]*P[i][l][1][m] for l in prod_line for m in range(P[i][l][0])])>=pulp.lpSum(modelSum[i])]
+    prob+=pulp.lpSum([h[i][i][t] for t in Tm[i]])==1
+    prob+=pulp.lpSum([x[i][i][j][t]*orderD[i][j] for j in Md[i] for t in T[i]])==pulp.lpSum([h[i][i][t1]*modelSum[i] for t1 in Tm[i])]
     for l in prod_line:
+        prob+=pulp.lpSum([k[i][i][l][0][m] for m in range(P[i][l][0])])==1
+        
+    for j in Md[i]:
+        prob+=pulp.lpSum(x[i][i][j][t] for t in T[i])==1
+        prob+=pulp.lpSum(x[i][i][j][t] for t in T[i] if t<=Oepst[i][j])==0
+        
+        
         #prob+=compD[l][o] <= Cmax[l][o]
         #prob+=compD[l][o] >=r[l][o]+Csums[l][o]*(process_days[o][l]/orderPool['order_num'][o])
         
-        prob+=r[l][o]+Pday[l][o]<=(orderPool['deli_date'][o]-datetime.datetime.strptime(plan_dates[0],'%Y-%m-%d')).days
-        prob+=r[l][o]>=max(0,(orderPool['epst'][o]-datetime.datetime.strptime(plan_dates[0],'%Y-%m-%d')).days)
-    prob+=pulp.lpSum([order_spd[(order_spd['order_id'==o])&(order_spd['line_o']==l)&(order_spd['day_process']==Pday[l][o])] for l in prod_line])==orderPool['order_num'][o]
+        #prob+=r[l][o]+Pday[l][o]<=(orderPool['deli_date'][o]-datetime.datetime.strptime(plan_dates[0],'%Y-%m-%d')).days
+        #prob+=r[l][o]>=max(0,(orderPool['epst'][o]-datetime.datetime.strptime(plan_dates[0],'%Y-%m-%d')).days)
+    #prob+=pulp.lpSum([order_spd[(order_spd['order_id'==o])&(order_spd['line_o']==l)&(order_spd['day_process']==Pday[l][o])] for l in prod_line])==orderPool['order_num'][o]
     #prob+=compD[l][o]<=(orderPool['deli_date'][o]-datetime.datetime.strptime(plan_dates[0],'%Y-%m-%d')).days
 #prob+=pulp.lpSum([Csums[l][o] for l in prod_line for o in orderList])==orderPool['order_num'].sum()
 #5.every line cannot made two orders at the same time
 
-eps=1e-2 
+#eps=1e-2 
 #for o in orderList:
     #prob+=Cmax+eps*pulp.lpSum([r[l][o] for l in prod_line])-eps*pulp.lpSum([compD[l][o] for l in prod_line])   
     
