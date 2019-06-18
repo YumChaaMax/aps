@@ -102,9 +102,7 @@ modelEP=orderPool.groupby(by='model_no')['absEpst'].min()
 modelLpst1=orderPool.groupby(by='model_no')['absLpst'].min()
 modelLpst2=orderPool.groupby(by='model_no')['absLpst'].max()
 
-T={}
-for i in modelList:
-    T[i]=range(modelEP[i],modelLpst2[i]+1)
+
 
 
 
@@ -169,13 +167,14 @@ date_s=pd.Series(plan_dates)
 #orders=adt.table_to_Adict(ordertable,'product','order_num')
 #got day volume produced based on practice curve
 dp_matrix=adt.day_speed_df(practice_pace,model_SAH,prodline)
-
+dp_matrix['cum_day']=dp_matrix.groupby(['model_no','line_no'])['num_by_day'].cumsum()
 #reform the speed to the form 
 
 
 order_spd=adt.order_speed_df(dp_matrix,orderPool)
 order_spd['cum_day']=order_spd.groupby(['order_id','line_no'])['num_by_day'].cumsum()
 
+#三条产线同时作业该型号的最快时间
 e={}
 for i in modelList:
     temp_fst=pd.DataFrame(dp_matrix[dp_matrix['model_no']==i].groupby('day_process')['num_by_day'].sum())
@@ -187,18 +186,60 @@ for i in modelList:
 #earlist model finish time
 Tm={}
 for i in modelList:
-    Tm[i]=range(int(e[i]),modelLpst2[i]+1)
+    tempL=[]
+    for m in range(int(e[i]),modelLpst2[i]+1):
+        tempL.append(m)
+    Tm[i]=tempL
 
+#
+#同理，三条产线同时作业订单的最快时间，到订单的最早完成时间
+oe={}
+for i in modelList:
+    temp={}
+    temp_fst=pd.DataFrame(dp_matrix[dp_matrix['model_no']==i].groupby('day_process')['num_by_day'].sum())
+    for j in Md[i]:
+        temp[j]=adt.process_csum(orderPool[orderPool['model_no']==i]['order_num'][j],temp_fst)+orderPool['absEpst'][j]
+    oe[i]=temp
+T={}
+for i in modelList:
+    temP={}
+    for j in Md[i]:
+        tempL=[]
+        for m in range(int(oe[i][j]),modelLpst2[i]+1):
+            tempL.append(m)
+        temP[j]=tempL
+    T[i]=temP
+#每条产线总运行时间下，所有可能的时间t
+TL=[]
+for i in range(0,orderPool['absLpst'].max()+1):
+    TL.append(i)
+#根据TL 算出每条产线的capacity during time t
+R={}
+for l in prod_line:
+    tempR={}
+    for t in TL:
+        tempR[t]=1
+    R[l]=tempR
+
+Tn={}
+for i in modelList:
+    tempL=[]
+    for m in range(modelEP[i],modelLpst2[i]+1):
+        tempL.append(m)
+    Tn[i]=tempL
 #learning df to learning dict
 P={}
 for i in modelList:
     tempTable=dp_matrix[dp_matrix['model_no']==i]
     tempm={}
     for l in prod_line:
-       tempdf=tempTable[tempTable['line_no']==l][['day_process','num_by_day']]
+       tempdf=tempTable[tempTable['line_no']==l][['day_process','cum_day']]
        a_dict={}
        a_dict[0]=tempdf['day_process'].tolist()
-       a_dict[1]=tempdf['num_by_day'].tolist()
+       a_dict[0].insert(0,0)
+       a_dict[1]=tempdf['cum_day'].tolist()
+       a_dict[1].insert(0,0)
+       #a_dict[2]=len(a_dict[0])
        tempm[l]=a_dict
     P[i]=tempm
 
@@ -208,38 +249,71 @@ for i in modelList:
     tempTable=dp_matrix[dp_matrix['model_no']==i]
     tempm={}
     for l in prod_line:
-       tempdf=tempTable[tempTable['line_no']==l][['day_process','num_by_day']]
+       tempdf=tempTable[tempTable['line_no']==l][['day_process','cum_day']]
        tempdf.index=tempdf['day_process']
        a_dict={}
        loop=tempdf['day_process'].tolist()
        for d in loop:
-           a_dict[d]=tempdf['num_by_day'][d]
+           a_dict[d]=tempdf['cum_day'][d]
            
        tempm[l]=a_dict
     Pv[i]=tempm
     
+x_comb={}
+for i in modelList:
+    tempL=[]
+    for j in Md[i]:
+        
+        for item in T[i][j]:
+            tempL.append((N[i],j,item))
+    x_comb[i]=tempL
+
+h_comb={}
+for i in modelList:
+    tempL=[]
+    for item in Tm[i]:
+        tempL.append((N[i],item))            
+    h_comb[i]=tempL
     
+qls_comb={}
+for i in modelList:
+    tempL=[]
+    for l in prod_line:
+        for t in TL:
+            tempL.append((N[i],l,t))
+    qls_comb[i]=tempL
+    
+
+k_comb={}
+for i in modelList:
+    tempL=[]
+    for l in prod_line:
+        for item in P[i][l][0]:
+            tempL.append((N[i],l,item))
+    k_comb[i]=tempL        
+
 prob=pulp.LpProblem("The APS Problem",pulp.LpMinimize)
 x={}
 h={}
 LS={}
 zz ={}
+QLS={}
 modeln=len(modelList)
-for i in range(modeln):
+for i in modelList:
     #a variable which is one if order j of the model i is completed in time t
-    x[i]=pulp.LpVariable('x',(N[i],Md[i],T[i]),0,1,pulp.LpInteger)
+    x[i]=pulp.LpVariable.dicts('x',x_comb[i],0,1,pulp.LpInteger)
     
     # a variable which is 1 in period t if all orders of model i
     #have been comlpeted , 0 otherwise
-    h[i]=pulp.LpVariable('h',(N[i],Tm[i]),0,1,pulp.LpInteger)
+    h[i]=pulp.LpVariable.dicts('h',h_comb[i],0,1,pulp.LpInteger)
     
-    #a variable which is 1 if the line is assigned to a model
-    LS[i]=pulp.LpVariable('ls',(N[i],L),0,1,pulp.LpContinuous)
+    #a variable which is 1 if the line is assigned to complete model i during period t
+    #LS[i]=pulp.LpVariable('ls',(N[i],Md[i],L),0,1,pulp.LpInteger)
+    QLS[i]=pulp.LpVariable.dicts('qls',qls_comb[i],0,1,pulp.LpInteger)
     
-    zz[i]=pulp.LpVariable('zz',(N[i],Md[i],T[i]),0,1,pulp.LpInteger)
+    #zz[i]=pulp.LpVariable('zz',(N[i],Md[i],T[i]),0,1,pulp.LpInteger)
     
-    for l in prod_line: 
-        k[i]=pulp.LpVariable('k',(N[i],l,range(len(P[i][l][0])),0,1,pulp.LpContinuous)
+    k[i]=pulp.LpVariable.dicts('k',k_comb[i],0,1,pulp.LpContinuous)
         
     
     
@@ -257,7 +331,7 @@ for i in range(modeln):
 #lambda compD[l][o] if compD[l][o]<=len(plan_dates) else len(plan_dates)
 #adt.model_total_volume(order_spd[(order_spd['order_id']==o)&(order_spd['line_no']==l)][['day_process','num_by_day']],adt.prod_days(compD[l][o],len(plan_dates),r[l][o]),len(plan_dates))
 prob+=pulp.lpSum([w[i][j]*x[i][i][j][t] for i in modelList for j in orderList for t in T[i] if t>g[i][j]])+pulp.lpSum([k[i][i][l][0][m]*P[i][l][0][m]\
-                    for i in modelList for l in prod_line for m in range(P[i][l][0])])
+                    for i in modelList for l in prod_line for m in P[i][l][0]])
 #pulp.lpSum([orderPool['priority'][o]*orderPool['order_type'][o]*\
                   #Csums[l][o] for o in orderList for l in prod_line])
 
@@ -268,18 +342,24 @@ prob+=pulp.lpSum([w[i][j]*x[i][i][j][t] for i in modelList for j in orderList fo
 #3. release date>=max(0,epst-plan_dates[0]) 
 #4.fixed sum across day and lines equal total num of orders
 for i in modelList:
-    prob+=pulp.lpSum([LS[i][i][l] for l in prod_line])==1
-    prob+=pulp.lpSum([k[i][i][l][0][m]*P[i][l][0][m]*P[i][l][1][m] for l in prod_line for m in range(P[i][l][0])])>=pulp.lpSum(modelSum[i])]
+    #prob+=pulp.lpSum([LS[i][i][l] for l in prod_line])>=1
+    prob+=pulp.lpSum(k[i][i][l][m] for l in prod_line for m in range(len(P[i][l][0])))==pulp.lpSum([LS[i][i][j][l] for j in Md[i] for l in prod_line])
+    prob+=pulp.lpSum([k[i][i][l][m]*P[i][l][1][m] for l in prod_line for m in range(P[i][l][0])])>=sum(modelSum[i])
     prob+=pulp.lpSum([h[i][i][t] for t in Tm[i]])==1
-    prob+=pulp.lpSum([x[i][i][j][t]*orderD[i][j] for j in Md[i] for t in T[i]])==pulp.lpSum([h[i][i][t1]*modelSum[i] for t1 in Tm[i])]
+    prob+=pulp.lpSum([x[i][i][j][t]*orderD[i][j] for j in Md[i] for t in T[i]])==pulp.lpSum([h[i][i][t1]*modelSum[i] for t1 in Tm[i]])
     for l in prod_line:
-        prob+=pulp.lpSum([k[i][i][l][0][m] for m in range(P[i][l][0])])==1
-        
+        prob+=pulp.lpSum([k[i][i][l][m] for m in P[i][l][0]])==1
+        prob+=pulp.lpSum([k[i][i][l][m]*P[i][l][0][m] for m in P[i][l][0]])+modelEP[i]<=pulp.lpSum([h[i][i][t]*t for t in Tm[i]])
+        #prob+=pulp.lpSum([QLS[i][i][l][t4] for t4 in TL])==pulp.lpSum([k[i][i][l][m]*P[i][l][0][m] for m in P[i][l][0]])
     for j in Md[i]:
-        prob+=pulp.lpSum(x[i][i][j][t] for t in T[i])==1
-        prob+=pulp.lpSum(x[i][i][j][t] for t in T[i] if t<=Oepst[i][j])==0
-        
-        
+        prob+=pulp.lpSum(x[i][i][j][t] for t in T[i][j])==1
+        prob+=pulp.lpSum(x[i][i][j][t] for t in T[i][j] if t<=oe[i][j])==0
+    
+    for t3 in Tm[i]:
+        prob+=pulp.lpSum([x[i][i][j][t] for t4 in T[i] if t4<=t3])>=pulp.lpSum([h[i][i][t3]*len(Md[i])])
+    
+for l in prod_line:
+    prob+=pulp.lpSum([k[i][i][l][m]*P[i][l][0][m] for i in modelList for m in P[i][l][0]])<=sum([R[l][t] for t in TL])       
         #prob+=compD[l][o] <= Cmax[l][o]
         #prob+=compD[l][o] >=r[l][o]+Csums[l][o]*(process_days[o][l]/orderPool['order_num'][o])
         
