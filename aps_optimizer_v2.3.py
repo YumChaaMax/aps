@@ -331,7 +331,7 @@ for i in modelList:
 #eps=1e-2 
 #lambda compD[l][o] if compD[l][o]<=len(plan_dates) else len(plan_dates)
 #adt.model_total_volume(order_spd[(order_spd['order_id']==o)&(order_spd['line_no']==l)][['day_process','num_by_day']],adt.prod_days(compD[l][o],len(plan_dates),r[l][o]),len(plan_dates))
-prob+=pulp.lpSum([0.01*w[i][j]*x[i][(i,j,t)]*(t-g[i][j]) for i in modelList for j in Md[i] for t in T[i][j] if t>g[i][j]])+pulp.lpSum([k[i][(i,l,m)]*P[i][l][0][m] for i in modelList for l in prod_line for m in P[i][l][0]])
+prob+=pulp.lpSum([x[i][(i,j,t)]*(t-g[i][j]) for i in modelList for j in Md[i] for t in T[i][j] if t>g[i][j]])+pulp.lpSum([0.5*k[i][(i,l,m)]*P[i][l][0][m] for i in modelList for l in prod_line for m in P[i][l][0]])
 #pulp.lpSum([orderPool['priority'][o]*orderPool['order_type'][o]*\
                   #Csums[l][o] for o in orderList for l in prod_line])
 

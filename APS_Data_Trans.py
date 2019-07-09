@@ -310,3 +310,18 @@ def df_to_dict(df:pd.DataFrame,outkey,interkey,value):
             tempDict[j]=tempdf[value][j]
         rlt_dict[i]=tempDict
     return rlt_dict
+
+def order_merge(orderpool,merge_days,start_date):
+    """
+    merge orders with the same models in a period which is controlled by the input merge_days,
+    and create a fake model column to seperate;
+    orderpool: a pool of orders
+    merge_month: within the merge days
+    """
+    end_date=datetime.datetime.strftime('%y-%m-%d',datetime.datetime.strptime(start_date)+datetime.timedelta(days=merge_days))
+    orderpool['sep_mo']=orderpool[(orderpool['deli_date']>=start_date)&(orderpool['deli_date']<end_date)]
+    orderpool['sep_mo']=orderpool[]
+    
+    
+    
+    

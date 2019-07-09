@@ -302,19 +302,19 @@ k={}
 modeln=len(modelList)
 for i in modelList:
     #a variable which is one if order j of the model i is completed in time t
-    x[i]=pulp.LpVariable.dicts('x',x_comb[i],0,1,pulp.LpInteger)
+    x[i]=pulp.LpVariable.dicts('x',x_comb[i],0,1,cat='Integer')
     
     # a variable which is 1 in period t if all orders of model i
     #have been comlpeted , 0 otherwise
-    h[i]=pulp.LpVariable.dicts('h',h_comb[i],0,1,pulp.LpInteger)
+    h[i]=pulp.LpVariable.dicts('h',h_comb[i],0,1,cat='Integer')
     
     #a variable which is 1 if the line is assigned to complete model i during period t
     #LS[i]=pulp.LpVariable('ls',(N[i],Md[i],L),0,1,pulp.LpInteger)
-    QLS[i]=pulp.LpVariable.dicts('qls',qls_comb[i],0,1,pulp.LpInteger)
+    QLS[i]=pulp.LpVariable.dicts('qls',qls_comb[i],0,1,cat='Integer')
     
     #zz[i]=pulp.LpVariable('zz',(N[i],Md[i],T[i]),0,1,pulp.LpInteger)
     
-    k[i]=pulp.LpVariable.dicts('k',k_comb[i],0,1,pulp.LpContinuous)
+    k[i]=pulp.LpVariable.dicts('k',k_comb[i],0,1,cat='Continuous')
         
     
     
@@ -331,7 +331,7 @@ for i in modelList:
 #eps=1e-2 
 #lambda compD[l][o] if compD[l][o]<=len(plan_dates) else len(plan_dates)
 #adt.model_total_volume(order_spd[(order_spd['order_id']==o)&(order_spd['line_no']==l)][['day_process','num_by_day']],adt.prod_days(compD[l][o],len(plan_dates),r[l][o]),len(plan_dates))
-prob+=pulp.lpSum([0.01*w[i][j]*x[i][(i,j,t)]*(t-g[i][j]) for i in modelList for j in Md[i] for t in T[i][j] if t>g[i][j]])+pulp.lpSum([k[i][(i,l,m)]*P[i][l][0][m] for i in modelList for l in prod_line for m in P[i][l][0]])
+prob+=pulp.lpSum([k[i][(i,l,m)]*P[i][l][0][m] for i in modelList for l in prod_line for m in P[i][l][0]])
 #pulp.lpSum([orderPool['priority'][o]*orderPool['order_type'][o]*\
                   #Csums[l][o] for o in orderList for l in prod_line])
 
@@ -345,7 +345,7 @@ for i in modelList:
     #prob+=pulp.lpSum([LS[i][i][l] for l in prod_line])>=1
     #prob+=pulp.lpSum([k[i][(i,l,m)] for l in prod_line for m in P[i][l][0]])==pulp.lpSum([LS[i][(i,j,l)] for j in Md[i] for l in prod_line])
     #限定分割总量
-    prob+=pulp.lpSum([k[i][(i,l,m)]*P[i][l][1][m] for l in prod_line for m in P[i][l][0]])>=modelSum[i]
+    prob+=pulp.lpSum([k[i][(i,l,m)]*P[i][l][1][m] for l in prod_line for m in P[i][l][0]])==modelSum[i]
     #限定完成只出现一次
     prob+=pulp.lpSum([h[i][(i,t)] for t in Tm[i]])==1
     #限定订单总量即型号总量，x与h的关系
@@ -391,8 +391,9 @@ print("Status:", pulp.LpStatus[prob.status])
     #for l in prod_line:
         #print((l,o),r[l,o].value(),compD[l,o].value(),Cmax[l,o].value())
 #a=[]
-#for v in prob.variables():
-    #print(v.name, "=", v.varValue)
+for v in prob.variables():
+    if v.varValue!=0:
+        print(v.name, "=", v.varValue)
     #a.append((v.name,v.varValue))
 #rlt_df=pd.DataFrame(a)
 #rlt_df.to_csv("test.csv")
