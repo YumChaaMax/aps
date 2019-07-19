@@ -9,7 +9,8 @@ import pandas as pd
 import pulp
 
 import datetime
-
+import time
+start_time=time.time()
 #hyposthesis: All models can be done by all lines
 #mkdates=datetime.datetime.strftime(datetime.datetime.now(),'%Y-%m-%d')
 #mkdates='2018-05-21'
@@ -20,6 +21,8 @@ prodline.index=prodline['line_no']
 prod_line=prodline.index.tolist()
 L=prod_line.copy()
 line_num=len(prod_line)
+print("Loading Production Lines: Complete.")
+print("Plan %d lines."%line_num)
 #read working days referenc table
 #working_days=pd.read_excel(.columns=['work_dates','type'])
 #plan_dates=['2019-04-20','2019-04-21','2019-04-22','2019-04-23','2019-04-24','2019-04-25']
@@ -34,14 +37,21 @@ merge_days=90
 #stdH=10*6
 
 model_SAH=pd.read_excel(r"./data/model_std_hour.xlsx",names=['model_no','sah'])
-
+model_SAH['sah']=model_SAH['sah']/3600
+model_num=len(model_SAH['model_no'].unique())
+print("Loading standard hour of models: Complete.")
+print("Got %d models."%model_num)
 #read learn pace table,H/piece
 practice_pace=pd.read_excel(r"./data/practice_curve.xlsx",names=['uid','model_no','line_no','day_process','effi'])
-
-
+mdln_match=len(practice_pace[['model_no','line_no']].drop_duplicates())
+print("Loading practice curve-efficiency: Complete")
+print("Got %d matches."%mdln_match)
 #read order table actual and other predicted confirmed by production manager 
 rawPool=pd.read_excel(r'./data/orderPool.xlsx',names=['order_id','model_no','order_num',\
                                                       'order_date','deli_date','order_type','priority','epst','deli_ahead'])
+order_num=len(rawPool)
+print("Loading Orders: Complete.")
+print("Got %d orders."%order_num)
 
 rawPool.index=rawPool['order_id']
 #need to adjust the parameter (which could affect the deputy of order type)
@@ -61,23 +71,28 @@ orderPool['absEpst']=orderPool['epst'].apply(lambda x:max((x-datetime.datetime.s
 #orderPool['absLpst']=orderPool['deli_date'].apply(lambda x:(x-datetime.datetime.strptime(start,'%Y-%m-%d')).days)-orderPool['deli_ahead']+buffer
 orderPool['desLpst']=orderPool['deli_date'].apply(lambda x:(x-datetime.datetime.strptime(start,'%Y-%m-%d')).days)-orderPool['deli_ahead']
 orderPool['absLpst']=orderPool['desLpst']+buffer
+orderPool['date_tag']=orderPool['deli_date'].apply(lambda x:adt.orderdate_period_tag(x,merge_days=merge_days,start_date=start))
+orderPool.rename({'model_no':'model_no_o'},axis='columns',inplace=True)
+orderPool['date_tag']=orderPool['date_tag'].apply(lambda x:str(x))
+orderPool['model_no_o']=orderPool['model_no_o'].apply(lambda x:str(x))
+orderPool['model_no']=orderPool['model_no_o'].str.cat(orderPool['date_tag'],sep='_')
 #orderPool['deli_date']-datetime.timedelta(days=orderPool['deli_ahead'])
 #orderPool['epst'].apply(lambda x:max((x-datetime.datetime.strptime(start,'%Y-%m-%d')).days,0))
-g=adt.df_to_dict(orderPool,'model_no','order_id','desLpst')
 
-# get min epst by models
-modelPool=orderPool.groupby('model_no')['order_num'].sum()
+print("Finish preprocess orders!")
+
 
 
 
 #dicts that contain the process time(day) produced by each line sole
-process_days=adt.process_day(orderPool,practice_pace,model_SAH,prodline)
+#process_days=adt.process_day(orderPool,practice_pace,model_SAH,prodline)
 #process_day=new_dict
 
 #unique order_no. and model_no.
 orderList=orderPool.index.tolist()
 modelList=orderPool['model_no'].unique().tolist()
 modelDict=orderPool[['model_no']].to_dict()['model_no']
+
 
 modelTot=orderPool.groupby('model_no')['order_num'].sum()
 modelSum={}
@@ -168,52 +183,71 @@ N=dict([(modelList[i],modelList[i]) for i in range(len(modelList))])
 
 #orders=adt.table_to_Adict(ordertable,'product','order_num')
 #got day volume produced based on practice curve
+dim_model_o=orderPool[['model_no','model_no_o']].drop_duplicates()
 dp_matrix=adt.day_speed_df(practice_pace,model_SAH,prodline)
+dp_matrix.rename({'model_no':'model_no_o'},axis='columns',inplace=True)
+dp_matrix=dp_matrix.merge(dim_model_o,how='inner',left_on='model_no_o',right_on='model_no_o')
 dp_matrix['cum_day']=dp_matrix.groupby(['model_no','line_no'])['num_by_day'].cumsum()
+dp_matrix=adt.dp_append(dp_matrix,modelSum)
+dp_matrix['day_process']=dp_matrix['day_process'].astype('int')
 #reform the speed to the form 
+# get min epst by models
+modelPool=orderPool.groupby('model_no')['order_num'].sum()
+g=adt.df_to_dict(orderPool,'model_no','order_id','desLpst')
+#order_spd=adt.order_speed_df(dp_matrix,orderPool)
+#order_spd['cum_day']=order_spd.groupby(['order_id','line_no'])['num_by_day'].cumsum()
+print("Transform orderPool to modelPool:Done.")
 
-
-order_spd=adt.order_speed_df(dp_matrix,orderPool)
-order_spd['cum_day']=order_spd.groupby(['order_id','line_no'])['num_by_day'].cumsum()
+#新model_no与产线的对应表
+model_line=dp_matrix[['model_no','line_no']].drop_duplicates()
 
 #三条产线同时作业该型号的最快时间
 e={}
 for i in modelList:
-    temp_fst=pd.DataFrame(dp_matrix[dp_matrix['model_no']==i].groupby('day_process')['num_by_day'].sum())
-    temp_fst['day_process']=temp_fst.index
-    e[i]=adt.process_csum(modelPool[i],temp_fst)+modelEP[i]
+    temp_fst=pd.DataFrame(dp_matrix[dp_matrix['model_no']==i].groupby('day_process')[['num_by_day','cum_day']].sum())
+    
+    if len(temp_fst)!=0:
+        temp_fst['day_process']=temp_fst.index
+    
+        temp_csum=adt.process_csum(modelPool[i],temp_fst)
+        e[i]=temp_csum+modelEP[i]
+    
+    else:
+        break
 #fast speed
 #fst=dp_matrix.groupby(by=['model_no','day_process'])['num_by_day'].sum()
-
+print('Got fastest completion time list!')
 #earlist model finish time
 Tm={}
 for i in modelList:
     tempL=[]
-    for m in range(int(e[i]),modelLpst2[i]+1):
+    for m in range(int(e[i])-1,modelLpst2[i]+5):
         tempL.append(m)
     Tm[i]=tempL
+print('Got epst!')
 
 #
 #同理，三条产线同时作业订单的最快时间，到订单的最早完成时间
 oe={}
 for i in modelList:
     temp={}
-    temp_fst=pd.DataFrame(dp_matrix[dp_matrix['model_no']==i].groupby('day_process')['num_by_day'].sum())
+    temp_fst=pd.DataFrame(dp_matrix[dp_matrix['model_no']==i].groupby('day_process')[['num_by_day','cum_day']].sum())
     for j in Md[i]:
         temp[j]=adt.process_csum(orderPool[orderPool['model_no']==i]['order_num'][j],temp_fst)+orderPool['absEpst'][j]
     oe[i]=temp
+print('Got oe!')
 T={}
 for i in modelList:
     temP={}
     for j in Md[i]:
         tempL=[]
-        for m in range(int(oe[i][j]),modelLpst2[i]+1):
+        for m in range(int(oe[i][j])-1,modelLpst2[i]+5):
             tempL.append(m)
         temP[j]=tempL
     T[i]=temP
 #每条产线总运行时间下，所有可能的时间t
 TL=[]
-for i in range(0,orderPool['absLpst'].max()+1):
+for i in range(0,orderPool['absLpst'].max()+5):
     TL.append(i)
 #根据TL 算出每条产线的capacity during time t
 R={}
@@ -226,15 +260,18 @@ for l in prod_line:
 Tn={}
 for i in modelList:
     tempL=[]
-    for m in range(modelEP[i],modelLpst2[i]+1):
+    for m in range(modelEP[i],modelLpst2[i]+5):
         tempL.append(m)
     Tn[i]=tempL
 #learning df to learning dict
+print('Got all related Ts')
+
 P={}
 for i in modelList:
     tempTable=dp_matrix[dp_matrix['model_no']==i]
     tempm={}
-    for l in prod_line:
+    loop_loop=model_line[model_line['model_no']==i]['line_no']
+    for l in loop_loop:
        tempdf=tempTable[tempTable['line_no']==l][['day_process','cum_day']]
        a_dict={}
        a_dict[0]=tempdf['day_process'].tolist()
@@ -246,11 +283,13 @@ for i in modelList:
     P[i]=tempm
 
 #same thing but in different form       
-Pv={}
+"""Pv={}
 for i in modelList:
     tempTable=dp_matrix[dp_matrix['model_no']==i]
     tempm={}
-    for l in prod_line:
+    loop_loop=model_line[model_line['model_no']==i]['line_no']
+    for l in loop_loop:
+    
        tempdf=tempTable[tempTable['line_no']==l][['day_process','cum_day']]
        tempdf.index=tempdf['day_process']
        a_dict={}
@@ -259,8 +298,9 @@ for i in modelList:
            a_dict[d]=tempdf['cum_day'][d]
            
        tempm[l]=a_dict
-    Pv[i]=tempm
-    
+    Pv[i]=tempm"""
+
+print('Loading dicts!')    
 x_comb={}
 for i in modelList:
     tempL=[]
@@ -280,8 +320,10 @@ for i in modelList:
 qls_comb={}
 for i in modelList:
     tempL=[]
-    for l in prod_line:
-        for t in TL:
+    loop_loop=model_line[model_line['model_no']==i]['line_no']
+    for l in loop_loop:
+    
+        for t in Tm[i]:
             tempL.append((N[i],l,t))
     qls_comb[i]=tempL
     
@@ -289,11 +331,36 @@ for i in modelList:
 k_comb={}
 for i in modelList:
     tempL=[]
-    for l in prod_line:
+    loop_loop=model_line[model_line['model_no']==i]['line_no']
+    for l in loop_loop:
+    
         for item in P[i][l][0]:
             tempL.append((N[i],l,item))
     k_comb[i]=tempL        
 
+f_comb={}
+for i in modelList:
+    tempL=[]
+    loop_loop=model_line[model_line['model_no']==i]['line_no']
+    for l in loop_loop:
+        
+        tempL.append((N[i],l))
+    f_comb[i]=tempL
+
+
+    
+ft_comb={}
+for i in modelList:
+    tempL=[]
+    loop_loop=model_line[model_line['model_no']==i]['line_no']
+    for l in loop_loop:
+        for item in TL:
+            tempL.append((N[i],l,item))
+    ft_comb[i]=tempL        
+    
+print('Finish Data Preprocess!')
+
+print('LP process begins.')
 prob=pulp.LpProblem("The APS Problem",pulp.LpMinimize)
 x={}
 h={}
@@ -301,6 +368,9 @@ LS={}
 zz ={}
 QLS={}
 k={}
+f={}
+ft={}
+
 modeln=len(modelList)
 for i in modelList:
     #a variable which is one if order j of the model i is completed in time t
@@ -308,15 +378,20 @@ for i in modelList:
     
     # a variable which is 1 in period t if all orders of model i
     #have been comlpeted , 0 otherwise
-    h[i]=pulp.LpVariable.dicts('h',h_comb[i],0,1,pulp.LpInteger)
+    h[i]=pulp.LpVariable.dicts('h',h_comb[i],0,1,cat='Binary')
     
     #a variable which is 1 if the line is assigned to complete model i during period t
     #LS[i]=pulp.LpVariable('ls',(N[i],Md[i],L),0,1,pulp.LpInteger)
-    QLS[i]=pulp.LpVariable.dicts('qls',qls_comb[i],0,1,pulp.LpInteger)
+    #QLS[i]=pulp.LpVariable.dicts('qls',qls_comb[i],0,1,cat='Binary')
     
     #zz[i]=pulp.LpVariable('zz',(N[i],Md[i],T[i]),0,1,pulp.LpInteger)
     
     k[i]=pulp.LpVariable.dicts('k',k_comb[i],0,1,pulp.LpContinuous)
+    
+    f[i]=pulp.LpVariable.dicts('f',f_comb[i],0,1,pulp.LpContinuous)
+    
+    ft[i]=pulp.LpVariable.dicts('kt',ft_comb[i],0,1,pulp.LpInteger)
+    
         
     
     
@@ -333,9 +408,9 @@ for i in modelList:
 #eps=1e-2 
 #lambda compD[l][o] if compD[l][o]<=len(plan_dates) else len(plan_dates)
 #adt.model_total_volume(order_spd[(order_spd['order_id']==o)&(order_spd['line_no']==l)][['day_process','num_by_day']],adt.prod_days(compD[l][o],len(plan_dates),r[l][o]),len(plan_dates))
-prob+=pulp.lpSum([x[i][(i,j,t)]*(t-g[i][j]) for i in modelList for j in Md[i] for t in T[i][j] if t>g[i][j]])+pulp.lpSum([0.5*k[i][(i,l,m)]*P[i][l][0][m] for i in modelList for l in prod_line for m in P[i][l][0]])
+prob+=pulp.lpSum([k[i][(i,l,m)]*P[i][l][0][m] for i in modelList for l in model_line[model_line['model_no']==i]['line_no'] for m in P[i][l][0]])
 #pulp.lpSum([orderPool['priority'][o]*orderPool['order_type'][o]*\
-                  #Csums[l][o] for o in orderList for l in prod_line])
+                  #Csums[l][o] for o in orderList for l in prod_line]) pulp.lpSum([x[i][(i,j,t)]*(t-g[i][j]) for i in modelList for j in Md[i] for t in T[i][j] if t>g[i][j]])
 
 #prob+=Cmax+eps*lpSum([r[j] for j in order_line])-eps*[compD[j] for j in order_line]
 #The constraints
@@ -347,31 +422,53 @@ for i in modelList:
     #prob+=pulp.lpSum([LS[i][i][l] for l in prod_line])>=1
     #prob+=pulp.lpSum([k[i][(i,l,m)] for l in prod_line for m in P[i][l][0]])==pulp.lpSum([LS[i][(i,j,l)] for j in Md[i] for l in prod_line])
     #限定分割总量
-    prob+=pulp.lpSum([k[i][(i,l,m)]*P[i][l][1][m] for l in prod_line for m in P[i][l][0]])>=modelSum[i]
+    #prob+=pulp.lpSum([k[i][(i,l,m)]*P[i][l][1][m] for l in model_line[model_line['model_no']==i]['line_no'] for m in P[i][l][0]])==modelSum[i]
     #限定完成只出现一次
+    #限定h
     prob+=pulp.lpSum([h[i][(i,t)] for t in Tm[i]])==1
+    #限定f
+    prob+=pulp.lpSum([f[i][(i,l)] for l in model_line[model_line['model_no']==i]['line_no']])==1
+    
     #限定订单总量即型号总量，x与h的关系
-    prob+=pulp.lpSum([x[i][(i,j,t)]*orderD[i][j] for j in Md[i] for t in T[i][j]])==pulp.lpSum([h[i][(i,t1)]*modelSum[i] for t1 in Tm[i]])
-    for l in prod_line:
+    #prob+=pulp.lpSum([x[i][(i,j,t)]*orderD[i][j] for j in Md[i] for t in T[i][j]])==pulp.lpSum([h[i][(i,t1)]*modelSum[i] for t1 in Tm[i]])
+    for l in model_line[model_line['model_no']==i]['line_no']:
         #限定k的取值
         prob+=pulp.lpSum([k[i][(i,l,m)] for m in P[i][l][0]])==1
-        prob+=pulp.lpSum([k[i][(i,l,m)]*P[i][l][0][m] for m in P[i][l][0]])+modelEP[i]<=pulp.lpSum([h[i][(i,t)]*t for t in Tm[i]])
+        #prob+=pulp.lpSum(QLS[i][(i,l,t)] for t in Tm[i])==1
+        #限定ft
+        prob+=pulp.lpSum([ft[i][(i,l,t)] for t in TL])==1
+        #k vs. f
+        prob+=pulp.lpSum([k[i][(i,l,m)]*P[i][l][1][m] for m in P[i][l][0]])==f[i][(i,l)]*modelSum[i]
+        #k与ft的关系
+        prob+=pulp.lpSum([k[i][(i,l,m)]*P[i][l][0][m] for m in P[i][l][0]])+modelEP[i]<=pulp.lpSum([ft[i][(i,l,t)]*t for t in Tm[i]])
         #prob+=pulp.lpSum([QLS[i][i][l][t4] for t4 in TL])==pulp.lpSum([k[i][i][l][m]*P[i][l][0][m] for m in P[i][l][0]])
+        #prob+=pulp.lpSum([QLS[i][(i,l,t7)]*t7 for t7 in Tm[i]])<=pulp.lpSum([h[i][(i,t8)]*t8 for t8 in Tm[i]])
+        prob+=pulp.lpSum([ft[i][(i,l,t)] for t in TL])>=f[i][(i,l)]
+        
     for j in Md[i]:
         #限定x=1只能出现一次
         prob+=pulp.lpSum([x[i][(i,j,t)] for t in T[i][j]])==1
+        #prob+=pulp.lpSum([x[i][(i,j,t)]*t4 for t4 in T[i][j]])<=pulp.lpSum([h[i][(i,t8)]*t8 for t8 in Tm[i]])
         #缩小x出现的时间点
-        prob+=pulp.lpSum([x[i][(i,j,t)] for t in T[i][j] if t<=oe[i][j]])==0
+        #prob+=pulp.lpSum([x[i][(i,j,t)] for t in T[i][j] if t<oe[i][j]])==0
     
     for t3 in Tm[i]:
         #限定x与h的关系
-        prob+=pulp.lpSum([x[i][(i,j,t4)] for j in Md[i] for t4 in T[i][j] if t4<=t3])>=pulp.lpSum([h[i][(i,t3)]*len(Md[i])])
+        
+        prob+=pulp.lpSum([x[i][(i,j,t4)] for j in Md[i] for t4 in T[i][j] if t4<=t3])>=h[i][(i,t3)]*len(Md[i])
+        prob+=pulp.lpSum([ft[i][(i,l,t5)] for l in model_line[model_line['model_no']==i]['line_no'] for t5 in TL ])>=h[i][(i,t3)]*len(model_line[model_line['model_no']==i]['line_no'])
+        
+            
+#for l in prod_line:
     
-for l in prod_line:
-    prob+=pulp.lpSum([k[i][(i,l,m)]*P[i][l][0][m] for i in modelList for m in P[i][l][0]])<=sum([R[l][t] for t in TL])       
+    #for t6 in TL:
+        
+    #prob+=pulp.lpSum([k[i][(i,l,m)]*P[i][l][0][m] for i in model_line[model_line['line_no']==l]['model_no'] for m in P[i][l][0]])<=sum([R[l][t] for t in TL]) 
+        #prob+=pulp.lpSum([k[i][(i,l,m)]*P[i][l][0][m] for i in model_line[model_line['line_no']==l]['model_no'] ])>=R[l][t6]*t6      
         #prob+=compD[l][o] <= Cmax[l][o]
         #prob+=compD[l][o] >=r[l][o]+Csums[l][o]*(process_days[o][l]/orderPool['order_num'][o])
-        
+    #prob+=pulp.LpSum([h[i][(i,t)] for i in modelList for t in Tm[i]])*1/2== sum([R[l][t] for t in TL])  
+    
         #prob+=r[l][o]+Pday[l][o]<=(orderPool['deli_date'][o]-datetime.datetime.strptime(plan_dates[0],'%Y-%m-%d')).days
         #prob+=r[l][o]>=max(0,(orderPool['epst'][o]-datetime.datetime.strptime(plan_dates[0],'%Y-%m-%d')).days)
     #prob+=pulp.lpSum([order_spd[(order_spd['order_id'==o])&(order_spd['line_o']==l)&(order_spd['day_process']==Pday[l][o])] for l in prod_line])==orderPool['order_num'][o]
@@ -392,12 +489,12 @@ print("Status:", pulp.LpStatus[prob.status])
 #for o in orderList:
     #for l in prod_line:
         #print((l,o),r[l,o].value(),compD[l,o].value(),Cmax[l,o].value())
-#a=[]
-#for v in prob.variables():
+a=[]
+for v in prob.variables():
     #print(v.name, "=", v.varValue)
-    #a.append((v.name,v.varValue))
-#rlt_df=pd.DataFrame(a)
-#rlt_df.to_csv("test.csv")
+    a.append((v.name,v.varValue))
+rlt_df=pd.DataFrame(a)
+rlt_df.to_csv("test.csv")
     
 print("Total amounts of products by week =", pulp.value(prob.objective)) 
 #for i in order_line:
@@ -447,8 +544,8 @@ print("Total amounts of products by week =", pulp.value(prob.objective))
         #np.matrix(line_m_matrix[[max(np.sign(sum([prod_sums[line][order][d] for order in model_orderDict[model]])),1e-10) for d in plan_dates].find(1)]))<=8*len(plan_dates)
     
     
-    
-    
+end_time=time.time()   
+print("time cost:%d min"%round((end_time-start_time)/60,2))    
    
     
 

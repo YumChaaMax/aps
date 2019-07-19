@@ -159,7 +159,7 @@ def day_speed_df(practice_curve:pd.DataFrame,std_hour:pd.DataFrame,line_info:pd.
     prod_speed=practice_curve.merge(std_hour,how='left',left_on='model_no',right_on='model_no')
     line_info=line_info.drop(columns=['line_no'])
     prod_speed=prod_speed.merge(line_info,how='left',left_on='line_no',right_index=True)
-    prod_speed['num_by_day']=round((prod_speed['work_hour']/prod_speed['sah'])*prod_speed['effi']*prod_speed['staff_num'],0)
+    prod_speed['num_by_day']=round(((prod_speed['work_hour']/prod_speed['sah']))*prod_speed['effi']*prod_speed['staff_num'],0)
     #o_dict=order_info['order_num'].to_dict()
     
     return(prod_speed)
@@ -218,30 +218,32 @@ def model_total_volume(production_speed:pd.DataFrame,d_day:pulp.LpAffineExpressi
 def process_csum(Ccsum:int,order_spdid:pd.DataFrame):
     """
         Ccsum: the amount of every line will process
-        order_spdpid: a data frame that includes  day_process,num_by_day
+        order_spdpid: a data frame that includes  day_process,num_by_day,cum_day
     
         returns process time of Ccsum
     """
     
-    temp_pace=order_spdid['num_by_day'].tolist()
-    m=len(order_spdid)
-    loop=0
-    if Ccsum>=1:    
-        while Ccsum>=1:
-            if loop<(m-1):
-                pace=temp_pace[loop]
-            else:
-                pace=temp_pace[m-1]
-            Ccsum-=pace
-            loop+=1
     
-        plus=(Ccsum+pace)/pace
+    temp_cum=order_spdid['cum_day'].tolist()
+    if Ccsum in temp_cum:
+        temp_prcs=temp_cum.index(Ccsum)+1
     else:
-        plus=1
-    temp_prcs=loop-1+plus
+        
+        temp_cum.append(Ccsum)
+        temp_cum.sort()
+        len_day=len(temp_cum)
+        temp_day=temp_cum.index(Ccsum)
+        if temp_day<len_day-1:
+            plus=round((temp_cum[temp_day+1]-Ccsum)/order_spdid['num_by_day'][temp_day+1])
+        else:
+            
+            
+            plus=round((Ccsum-temp_cum[temp_day-1])/order_spdid['num_by_day'][temp_day])
+        temp_prcs=temp_day+plus
+        
     
     return temp_prcs
-    
+        
 def prod_days(x,y,z):
     if z<=y:
         if x<=y:
@@ -311,17 +313,52 @@ def df_to_dict(df:pd.DataFrame,outkey,interkey,value):
         rlt_dict[i]=tempDict
     return rlt_dict
 
-def order_merge(orderpool,merge_days,start_date):
-    """
-    merge orders with the same models in a period which is controlled by the input merge_days,
-    and create a fake model column to seperate;
-    orderpool: a pool of orders
-    merge_month: within the merge days
-    """
-    end_date=datetime.datetime.strftime('%y-%m-%d',datetime.datetime.strptime(start_date)+datetime.timedelta(days=merge_days))
-    orderpool['sep_mo']=orderpool[(orderpool['deli_date']>=start_date)&(orderpool['deli_date']<end_date)]
-    orderpool['sep_mo']=orderpool[]
+def orderdate_period_tag(date_str,merge_days,start_date):
+    """tag on period"""
+    start_date=datetime.datetime.strptime(start_date,'%Y-%m-%d')
+    end_date=start_date+datetime.timedelta(days=merge_days)
     
+    if (date_str>=start_date) & (date_str<end_date):
+        period_tag=1
+    else:
+        period_tag=2
+    return period_tag
     
+
+def dp_append(df_origin,model_sum:dict):
+    df=df_origin.copy()
+    md_loop=df['model_no'].unique()
+    model_line=df[['model_no','line_no']].drop_duplicates()
+    temp_loop=pd.DataFrame()
+    for m in md_loop:
+        
+        for l in model_line[model_line['model_no']==m]['line_no']:
+            temp_df=df[(df['model_no']==m)&(df['line_no']==l)]
+            temp_max=temp_df['cum_day'].max()
+            temp_qty=model_sum[m]
+            if temp_qty>temp_max:
+                temp_speed=temp_df['num_by_day'].max()
+                dif=math.ceil((temp_qty-temp_max)/temp_speed)
+                temp_day=temp_df['day_process'].max()
+                
+                row1=temp_df[temp_df['cum_day']==temp_max]
+                row1.reset_index(inplace=True)
+                row1=row1.iloc[0]
+                new_df=pd.DataFrame()
+                for i in range(1,dif+1):
+                    row1['day_process']=temp_day+i
+                    row1['num_by_day']=temp_speed
+                    temp_max+=temp_speed
+                    
+                    row1['cum_day']=temp_max
+                    
+                    new_df=new_df.append(row1,ignore_index=True,sort=True)
+                new_df.drop(columns='index')
+                temp_loop=temp_loop.append(new_df,ignore_index=True,sort=True)
+    df=df.append(temp_loop,ignore_index=True,sort=True)           
+
+    return df                
+                
     
+
     
