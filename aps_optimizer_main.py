@@ -221,7 +221,7 @@ print('Got fastest completion time list!')
 Tm={}
 for i in modelList:
     tempL=[]
-    for m in range(int(e[i])-1,modelLpst2[i]+5):
+    for m in range(int(e[i])-1,modelLpst2[i]+1):
         tempL.append(m)
     Tm[i]=tempL
 print('Got epst!')
@@ -241,13 +241,13 @@ for i in modelList:
     temP={}
     for j in Md[i]:
         tempL=[]
-        for m in range(int(oe[i][j])-1,modelLpst2[i]+5):
+        for m in range(int(oe[i][j])-1,modelLpst2[i]+1):
             tempL.append(m)
         temP[j]=tempL
     T[i]=temP
 #每条产线总运行时间下，所有可能的时间t
 TL=[]
-for i in range(0,orderPool['absLpst'].max()+5):
+for i in range(0,orderPool['absLpst'].max()+1):
     TL.append(i)
 #根据TL 算出每条产线的capacity during time t
 R={}
@@ -260,7 +260,7 @@ for l in prod_line:
 Tn={}
 for i in modelList:
     tempL=[]
-    for m in range(modelEP[i],modelLpst2[i]+5):
+    for m in range(modelEP[i],modelLpst2[i]+1):
         tempL.append(m)
     Tn[i]=tempL
 #learning df to learning dict
@@ -338,6 +338,19 @@ for i in modelList:
             tempL.append((N[i],l,item))
     k_comb[i]=tempL        
 
+w_comb={}
+for i in modelList:
+    tempL=[]
+    loop_loop=model_line[model_line['model_no']==i]['line_no']
+    for l in loop_loop:
+    
+        for item in P[i][l][0]:
+            tempL.append((N[i],l,item))
+    w_comb[i]=tempL 
+
+
+
+
 f_comb={}
 for i in modelList:
     tempL=[]
@@ -357,6 +370,7 @@ for i in modelList:
         for item in TL:
             tempL.append((N[i],l,item))
     ft_comb[i]=tempL        
+
     
 print('Finish Data Preprocess!')
 
@@ -364,13 +378,11 @@ print('LP process begins.')
 prob=pulp.LpProblem("The APS Problem",pulp.LpMinimize)
 x={}
 h={}
-LS={}
-zz ={}
-QLS={}
 k={}
+wt={}
 f={}
 ft={}
-
+wn={}
 modeln=len(modelList)
 for i in modelList:
     #a variable which is one if order j of the model i is completed in time t
@@ -387,10 +399,12 @@ for i in modelList:
     #zz[i]=pulp.LpVariable('zz',(N[i],Md[i],T[i]),0,1,pulp.LpInteger)
     
     k[i]=pulp.LpVariable.dicts('k',k_comb[i],0,1,pulp.LpContinuous)
+    wt[i]=pulp.LpVariable.dicts('w',w_comb[i],0,1,cat='Binary')
+    #wn[i]=pulp.LpVariable.dicts('wn',w_comb[i],0,1,cat='Binary')
     
     f[i]=pulp.LpVariable.dicts('f',f_comb[i],0,1,pulp.LpContinuous)
     
-    ft[i]=pulp.LpVariable.dicts('kt',ft_comb[i],0,1,pulp.LpInteger)
+    ft[i]=pulp.LpVariable.dicts('ft',ft_comb[i],0,1,pulp.LpInteger)
     
         
     
@@ -408,7 +422,7 @@ for i in modelList:
 #eps=1e-2 
 #lambda compD[l][o] if compD[l][o]<=len(plan_dates) else len(plan_dates)
 #adt.model_total_volume(order_spd[(order_spd['order_id']==o)&(order_spd['line_no']==l)][['day_process','num_by_day']],adt.prod_days(compD[l][o],len(plan_dates),r[l][o]),len(plan_dates))
-prob+=pulp.lpSum([k[i][(i,l,m)]*P[i][l][0][m] for i in modelList for l in model_line[model_line['model_no']==i]['line_no'] for m in P[i][l][0]])
+prob+=pulp.lpSum([k[i][(i,l,m)]*P[i][l][0][m] for i in modelList for l in model_line[model_line['model_no']==i]['line_no'] for m in P[i][l][0]])+pulp.lpSum([w[i][j]*x[i][(i,j,t)]*(t-g[i][j]) for i in modelList for j in Md[i] for t in T[i][j] if t>g[i][j]])
 #pulp.lpSum([orderPool['priority'][o]*orderPool['order_type'][o]*\
                   #Csums[l][o] for o in orderList for l in prod_line]) pulp.lpSum([x[i][(i,j,t)]*(t-g[i][j]) for i in modelList for j in Md[i] for t in T[i][j] if t>g[i][j]])
 
@@ -434,6 +448,8 @@ for i in modelList:
     for l in model_line[model_line['model_no']==i]['line_no']:
         #限定k的取值
         prob+=pulp.lpSum([k[i][(i,l,m)] for m in P[i][l][0]])==1
+        
+        prob+=pulp.lpSum([wt[i][(i,l,m)] for m in P[i][l][0]])==1
         #prob+=pulp.lpSum(QLS[i][(i,l,t)] for t in Tm[i])==1
         #限定ft
         prob+=pulp.lpSum([ft[i][(i,l,t)] for t in TL])==1
@@ -444,6 +460,16 @@ for i in modelList:
         #prob+=pulp.lpSum([QLS[i][i][l][t4] for t4 in TL])==pulp.lpSum([k[i][i][l][m]*P[i][l][0][m] for m in P[i][l][0]])
         #prob+=pulp.lpSum([QLS[i][(i,l,t7)]*t7 for t7 in Tm[i]])<=pulp.lpSum([h[i][(i,t8)]*t8 for t8 in Tm[i]])
         prob+=pulp.lpSum([ft[i][(i,l,t)] for t in TL])>=f[i][(i,l)]
+        
+        temp_loop=len(P[i][l][0])
+        for p in range(temp_loop):
+            if (p !=0) and (p!=(temp_loop-1)):
+                prob+=k[i][(i,l,p)]<=wt[i][(i,l,p-1)]+wt[i][(i,l,p)]
+            elif p==0:
+                prob+=k[i][(i,l,p)]<=wt[i][(i,l,p)]
+            elif p==temp_loop-1:
+                prob+=k[i][(i,l,p)]<=wt[i][(i,l,p-1)]
+                
         
     for j in Md[i]:
         #限定x=1只能出现一次
@@ -494,9 +520,34 @@ for v in prob.variables():
     #print(v.name, "=", v.varValue)
     a.append((v.name,v.varValue))
 rlt_df=pd.DataFrame(a)
+
 rlt_df.to_csv("test.csv")
     
-print("Total amounts of products by week =", pulp.value(prob.objective)) 
+print("Total amounts of products by day =", pulp.value(prob.objective)) 
+
+rlt_df.columns=['vname','vvalue']
+vali_df=rlt_df[rlt_df['vvalue']!=0]
+
+temp_S=vali_df['vname'].str.split(pat='_\(')
+vali_df['label']=temp_S.apply(lambda x:x[0])
+vali_df['cat']=temp_S.apply(lambda x:x[1])
+
+line_rls=vali_df[vali_df['label']=='ft']
+kt_df=adt.kname_split(line_rls['cat'])
+
+k_ped=vali_df[vali_df['label']=='k']
+k_df=adt.kname_split(k_ped['cat'])
+k_ped=k_ped.merge(k_df,left_index=True,right_index=True,how='inner')
+k_ped['temp_t']=k_ped['vvalue']*k_ped['ped']
+k_out=k_ped.groupby(['model','line'])['temp_t'].sum()
+k_out=pd.DataFrame(k_out)
+k_out.reset_index(inplace=True)
+
+outcome=kt_df.merge(k_out,left_on=['model','line'],right_on=['model','line'],how='inner')
+outcome.columns=['model','line','lead_time','period']
+outcome['release_date']=outcome['lead_time']-outcome['period'].apply(round)
+
+outcome.to_csv("test.csv")
 #for i in order_line:
     #if Csums[i]>0:
         #print(i, Csums[i],r[i],compD[i])

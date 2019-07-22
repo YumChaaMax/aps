@@ -359,6 +359,13 @@ def dp_append(df_origin,model_sum:dict):
 
     return df                
                 
-    
+def kname_split(series,has_no=True):
+    outdf=pd.DataFrame()
+    temp_s=series.str.split(pat=',_') 
+    outdf['model']=temp_s.apply(lambda x:x[0])
+    outdf['line']=temp_s.apply(lambda x:x[1])
+    outdf['ped']=temp_s.apply(lambda x:x[2]).str.rstrip('\)')
+    outdf['ped']=outdf['ped'].astype('float')
+    return outdf
 
     
