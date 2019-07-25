@@ -28,7 +28,7 @@ print("Plan %d lines."%line_num)
 #plan_dates=['2019-04-20','2019-04-21','2019-04-22','2019-04-23','2019-04-24','2019-04-25']
 
 #days=len(plan_dates)
-start='2019-01-01'
+start='2019-01-02'
 buffer=5
 #设定一起考虑的同型号订单区间（以交付时间为准）
 merge_days=90
@@ -59,9 +59,12 @@ rawPool.index=rawPool['order_id']
 #read production records
 #prd_records=pd.read_excel(names=['line_id','order_id','model_no','prd_num','prd_date'])
 
+work_day=pd.read_excel(r"./data/work_day.xlsx",names=['day_date','is_holiday','workday_id'])
 
+#rawPool=rawPool.merge(work_day,how='left',left_on='epst',right_on='day_date')
+#rawPool=rawPool.merge(work_day,how='left',left_on='deli_date',right_on='day_date')
 
-
+rawPool['abstEpst']=rawPool['epst'].apply(lambda x: workday_idf(x,work_day))
 ##transform and clean data，create order pool, practice matrice as input or reference data
 #order pool
 orderPool=rawPool.copy()
@@ -489,7 +492,7 @@ for i in modelList:
             if i!=b:
                 prob+=z[i][(i,b,l)]==1-z[b][(b,i,l)]
                 prob+=pulp.lpSum([ft[b][(b,l,t)]*t for t in TL])+pulp.lpSum([k[i][(i,l,m)]*P[i][l][0][m] for m in P[i][l][0]])-z[b][(b,i,l)]*M<=pulp.lpSum([ft[i][(i,l,t)]*t for t in TL])
-                prob+=pulp.lpSum([ft[i][(i,l,t)]*t for t in TL])+pulp.lpSum([k[b][(b,l,m)]*P[b][l][0][m] for m in P[i][l][0]])-z[i][(i,b,l)]*M<=pulp.lpSum([ft[b][(b,l,t)]*t for t in TL])
+                prob+=pulp.lpSum([ft[i][(i,l,t)]*t for t in TL])+pulp.lpSum([k[b][(b,l,m)]*P[b][l][0][m] for m in P[b][l][0]])-z[i][(i,b,l)]*M<=pulp.lpSum([ft[b][(b,l,t)]*t for t in TL])
         
     for j in Md[i]:
         #限定x=1只能出现一次

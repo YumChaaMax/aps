@@ -315,8 +315,8 @@ def df_to_dict(df:pd.DataFrame,outkey,interkey,value):
 
 def orderdate_period_tag(date_str,merge_days,start_date):
     """tag on period"""
-    start_date=datetime.datetime.strptime(start_date,'%Y-%m-%d')
-    end_date=start_date+datetime.timedelta(days=merge_days)
+    
+    end_date=start_date+merge_days
     
     if (date_str>=start_date) & (date_str<end_date):
         period_tag=1
@@ -368,4 +368,20 @@ def kname_split(series,has_no=True):
     outdf['ped']=outdf['ped'].astype('float')
     return outdf
 
-    
+def workday_idf(day_date,work_sheet,isback=True):
+    work_sheet.sort_values(by='day_date',inplace=True)
+    date0=work_sheet['day_date'][0]
+    if day_date<=date0:
+        idf=0
+    else:
+        if work_sheet[work_sheet['day_date']==day_date]['workday_id'].item()==-1:
+            if isback:
+                temp_d=work_sheet[(work_sheet['day_date']>day_date)&(work_sheet['workday_id']!=-1)]['workday_id']
+                new_temp=temp_d.sort_values()
+            else:
+                temp_d=work_sheet[(work_sheet['day_date']<day_date)&(work_sheet['workday_id']!=-1)]['workday_id']
+                new_temp=temp_d.sort_values(ascending=False)
+            idf=new_temp.tolist()[0]
+        else:
+            idf=work_sheet[work_sheet['day_date']==day_date]['workday_id'].tolist()[0]
+    return idf
