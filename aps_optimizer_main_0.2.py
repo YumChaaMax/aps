@@ -29,9 +29,10 @@ print("Plan %d lines."%line_num)
 
 #days=len(plan_dates)
 start='2019-01-02'
-buffer=5
+buffer=10
 #设定一起考虑的同型号订单区间（以交付时间为准）
 merge_days=90
+
 
 # standard work hours for each product line in the next week, suppose is defined as hour 
 #stdH=10*6
@@ -83,10 +84,10 @@ orderPool['absLpst']=orderPool['desLpst']+buffer
 orderPool['date_tag']=orderPool['desLpst'].apply(lambda x:adt.orderdate_period_tag(x,merge_days=merge_days,start_date=startAbst))
 orderPool.rename({'model_no':'model_no_o'},axis='columns',inplace=True)
 orderPool['date_tag']=orderPool['date_tag'].apply(lambda x:str(x))
-orderPool['model_pty']=orderPool['date_tag'].apply(lambda x: 0.8 if x=='1' else 1)
+orderPool['order_pty']=orderPool['date_tag'].apply(lambda x: 1.0 if x=='1' else 0.8)
 
 
-orderPool.rename({0:'order_pty'},axis='columns',inplace=True)
+#orderPool.rename({0:'order_pty'},axis='columns',inplace=True)
 orderPool['model_no_o']=orderPool['model_no_o'].apply(lambda x:str(x))
 orderPool['model_no']=orderPool['model_no_o'].str.cat(orderPool['date_tag'],sep='_')
 #orderPool['deli_date']-datetime.timedelta(days=orderPool['deli_ahead'])
@@ -128,7 +129,12 @@ for i in modelList:
         
     w[i]=tempdict
 
-modelEP=orderPool.groupby(by='model_no')['absEpst'].min()
+#modelEP=orderPool.groupby('model_no')['absEpst'].min()
+model_r=orderPool[['model_no','model_no_o']].drop_duplicates()
+#new_modelEP=modelEP.reset_index()
+tempEP=orderPool.groupby('model_no_o')['absEpst'].min()
+tempEP=tempEP.reset_index()
+modelEP=model_r.merge(tempEP,how='left',left_on='model_no_o',right_on='model_no_o')
 modelLpst1=orderPool.groupby(by='model_no')['absLpst'].min()
 modelLpst2=orderPool.groupby(by='model_no')['absLpst'].max()
 
@@ -267,7 +273,7 @@ R={}
 for l in prod_line:
     tempR={}
     for t in TL:
-        tempR[t]=1
+        tempR[t]=t
     R[l]=tempR
 
 Tn={}
@@ -455,7 +461,7 @@ for i in modelList:
 #eps=1e-2 
 #lambda compD[l][o] if compD[l][o]<=len(plan_dates) else len(plan_dates)
 #adt.model_total_volume(order_spd[(order_spd['order_id']==o)&(order_spd['line_no']==l)][['day_process','num_by_day']],adt.prod_days(compD[l][o],len(plan_dates),r[l][o]),len(plan_dates))
-prob+=pulp.lpSum([k[i][(i,l,m)]*P[i][l][0][m] for i in modelList for l in model_line[model_line['model_no']==i]['line_no'] for m in P[i][l][0]])+pulp.lpSum([w[i][j]*x[i][(i,j,t)]*(t-g[i][j]) for i in modelList for j in Md[i] for t in T[i][j] if t>g[i][j]])
+prob+=pulp.lpSum([k[i][(i,l,m)]*P[i][l][0][m] for i in modelList for l in model_line[model_line['model_no']==i]['line_no'] for m in P[i][l][0]])+pulp.lpSum([mp[i]*w[i][j]*x[i][(i,j,t)]*(t-g[i][j]) for i in modelList for j in Md[i] for t in T[i][j] if t>g[i][j]])
 #pulp.lpSum([orderPool['priority'][o]*orderPool['order_type'][o]*\
                   #Csums[l][o] for o in orderList for l in prod_line]) pulp.lpSum([x[i][(i,j,t)]*(t-g[i][j]) for i in modelList for j in Md[i] for t in T[i][j] if t>g[i][j]])
 
@@ -489,7 +495,7 @@ for i in modelList:
         #k vs. f
         prob+=pulp.lpSum([k[i][(i,l,m)]*P[i][l][1][m] for m in P[i][l][0]])==f[i][(i,l)]*modelSum[i]
         #k与ft的关系
-        prob+=pulp.lpSum([k[i][(i,l,m)]*P[i][l][0][m] for m in P[i][l][0]])+modelEP[i]<=pulp.lpSum([ft[i][(i,l,t)]*t for t in Tm[i]])
+        prob+=pulp.lpSum([k[i][(i,l,m)]*P[i][l][0][m] for m in P[i][l][0]])+modelEP[i]<=pulp.lpSum([ft[i][(i,l,t)]*t for t in TL])
         #prob+=pulp.lpSum([QLS[i][i][l][t4] for t4 in TL])==pulp.lpSum([k[i][i][l][m]*P[i][l][0][m] for m in P[i][l][0]])
         #prob+=pulp.lpSum([QLS[i][(i,l,t7)]*t7 for t7 in Tm[i]])<=pulp.lpSum([h[i][(i,t8)]*t8 for t8 in Tm[i]])
         prob+=pulp.lpSum([ft[i][(i,l,t)] for t in TL])>=f[i][(i,l)]
@@ -519,7 +525,7 @@ for i in modelList:
         #限定x与h的关系
         
         prob+=pulp.lpSum([x[i][(i,j,t4)] for j in Md[i] for t4 in T[i][j] if t4<=t3])>=h[i][(i,t3)]*len(Md[i])
-        prob+=pulp.lpSum([ft[i][(i,l,t5)] for l in model_line[model_line['model_no']==i]['line_no'] for t5 in TL ])>=h[i][(i,t3)]*len(model_line[model_line['model_no']==i]['line_no'])
+        prob+=pulp.lpSum([ft[i][(i,l,t5)] for l in model_line[model_line['model_no']==i]['line_no'] for t5 in TL if t5<=t3])>=h[i][(i,t3)]*len(model_line[model_line['model_no']==i]['line_no'])
         
             
 #for l in prod_line:
@@ -544,7 +550,7 @@ for i in modelList:
     #prob+=Cmax+eps*pulp.lpSum([r[l][o] for l in prod_line])-eps*pulp.lpSum([compD[l][o] for l in prod_line])   
     
 prob.writeLP("APSModel.lp")
-prob.solve()
+prob.solve(pulp.CPLEX_PY())
 print("Status:", pulp.LpStatus[prob.status])
 
 
