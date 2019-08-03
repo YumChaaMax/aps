@@ -565,7 +565,8 @@ for i in modelList:
     #prob+=Cmax+eps*pulp.lpSum([r[l][o] for l in prod_line])-eps*pulp.lpSum([compD[l][o] for l in prod_line])   
     
 prob.writeLP("APSModel.lp")
-prob.solve(pulp.GLPK())
+solver=pulp.solvers.COIN_CMD(r'~/math_dep/cbc/Cbc-2.9/build/Cbc/src/cbc',threads=32,msg=1,fracGap=0.01)
+prob.solve(solver)
 print("Status:", pulp.LpStatus[prob.status])
 
 
