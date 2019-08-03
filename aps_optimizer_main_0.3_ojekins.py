@@ -605,7 +605,7 @@ outcome=kt_df.merge(k_out,left_on=['model','line'],right_on=['model','line'],how
 outcome.columns=['model','line','lead_time','period']
 outcome['release_date']=outcome['lead_time']-outcome['period'].apply(round)
 
-outcome.to_csv("test.csv")
+outcome.to_csv("test_nex.csv")
 outcome['release_t']=outcome['release_date']+startAbst
 outcome['lead_t']=outcome['lead_time']+startAbst
 outcome=outcome.merge(work_day,how='left',left_on='lead_t',right_on='workday_id')
