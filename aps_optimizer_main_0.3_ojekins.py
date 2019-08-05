@@ -420,6 +420,10 @@ Y=40
            
 print('Finish Data Preprocess!')
 
+#####前面主要是数据处理部分########
+#####后面是模型，用到了mixed integer linear 
+
+
 print('LP process begins.')
 prob=pulp.LpProblem("The APS Problem",pulp.LpMinimize)
 x={}
@@ -433,10 +437,12 @@ z={}
 modeln=len(modelList)
 for i in modelList:
     #a variable which is one if order j of the model i is completed in time t
+    #订单j (型号i) 在t时间完成生产（下线时间）-类型：binary
     x[i]=pulp.LpVariable.dicts('x',x_comb[i],0,1,pulp.LpInteger)
     
     # a variable which is 1 in period t if all orders of model i
     #have been comlpeted , 0 otherwise
+    #型号i 在t时间完成生产（下线时间）-类型：binary
     h[i]=pulp.LpVariable.dicts('h',h_comb[i],0,1,cat='Binary')
     
     #a variable which is 1 if the line is assigned to complete model i during period t
@@ -444,15 +450,20 @@ for i in modelList:
     #QLS[i]=pulp.LpVariable.dicts('qls',qls_comb[i],0,1,cat='Binary')
     
     #zz[i]=pulp.LpVariable('zz',(N[i],Md[i],T[i]),0,1,pulp.LpInteger)
-    
+    #辅佐变量，用于计算可变的生产速度
     k[i]=pulp.LpVariable.dicts('k',k_comb[i],0,1,pulp.LpContinuous)
+    #
+    #辅佐变量，用于表示ft 与 f的关系， 当f=0,ft必为0，f不为0，f=1
     wt[i]=pulp.LpVariable.dicts('w',w_comb[i],0,1,cat='Binary')
     #wn[i]=pulp.LpVariable.dicts('wn',w_comb[i],0,1,cat='Binary')
     
+    #型号i在不同产线生产的比例  类型：continuous[0,1】
     f[i]=pulp.LpVariable.dicts('f',f_comb[i],0,1,pulp.LpContinuous)
     
+    #型号i 在产线l 在t 时间完成
     ft[i]=pulp.LpVariable.dicts('ft',ft_comb[i],0,1,pulp.LpInteger)
-    
+    #
+    # 辅佐变量，用来解决生产占用
     z[i]=pulp.LpVariable.dicts('z',z_comb[i],0,1,pulp.LpInteger)
     
         
@@ -501,21 +512,28 @@ for i in modelList:
         #限定k的取值
         prob+=pulp.lpSum([k[i][(i,l,m)] for m in P[i][l][0]])==1
         
+        #限定wt的取值
         prob+=pulp.lpSum([wt[i][(i,l,m)] for m in P[i][l][0]])==1
         #prob+=pulp.lpSum(QLS[i][(i,l,t)] for t in Tm[i])==1
+        
         #限定ft
         prob+=pulp.lpSum([ft[i][(i,l,t)] for t in Tn[i]])<=1
-        #k vs. f
+        
+        #k vs. f        
         prob+=pulp.lpSum([k[i][(i,l,m)]*P[i][l][1][m] for m in P[i][l][0]])==f[i][(i,l)]*modelSum[i]
         #k与ft的关系
         prob+=pulp.lpSum([k[i][(i,l,m)]*P[i][l][0][m] for m in P[i][l][0]])+modelEP[i]<=pulp.lpSum([ft[i][(i,l,t)]*t for t in Tn[i]])
         
+        #下面三行用于表达f与ft的关系，如果一条产线没有安排该型号则f=0,那么ft必然是0
+        #反之,ft必然在这条产线有一个值是1
         prob+=f[i][(i,l)]<=Y*pulp.lpSum([ft[i][(i,l,t)] for t in Tn[i]])
         prob+=pulp.lpSum([ft[i][(i,l,t)] for t in Tn[i]])<=f[i][(i,l)]*Y
         #prob+=pulp.lpSum([QLS[i][i][l][t4] for t4 in TL])==pulp.lpSum([k[i][i][l][m]*P[i][l][0][m] for m in P[i][l][0]])
         #prob+=pulp.lpSum([QLS[i][(i,l,t7)]*t7 for t7 in Tm[i]])<=pulp.lpSum([h[i][(i,t8)]*t8 for t8 in Tm[i]])
         prob+=pulp.lpSum([ft[i][(i,l,t)] for t in Tn[i]])>=f[i][(i,l)]
         
+        #解决曲线速度的问题：本例用picecewise linear  来计算速度，k之和唯一，
+        #下面用于决定k必须是相邻两个部位0的值
         temp_loop=len(P[i][l][0])
         for p in range(temp_loop):
             if (p !=0) and (p!=(temp_loop-1)):
@@ -524,6 +542,8 @@ for i in modelList:
                 prob+=k[i][(i,l,p)]<=wt[i][(i,l,p)]
             elif p==temp_loop-1:
                 prob+=k[i][(i,l,p)]<=wt[i][(i,l,p-1)]
+                
+        #用于解决生产占用时间问题，及必须一个型号生产完了，另一个才能生产
         for b in model_line[model_line['line_no']==l]['model_no']:
             if i!=b:
                 prob+=z[i][(i,b,l)]==1-z[b][(b,i,l)]
@@ -538,9 +558,11 @@ for i in modelList:
         #prob+=pulp.lpSum([x[i][(i,j,t)] for t in T[i][j] if t<oe[i][j]])==0
     
     for t3 in Tm[i]:
-        #限定x与h的关系
+        #限定x与h的关系:
         
         prob+=pulp.lpSum([x[i][(i,j,t4)] for j in Md[i] for t4 in T[i][j] if t4<=t3])>=h[i][(i,t3)]*len(Md[i])
+        
+        #限定ft 与h 的关系：
         prob+=pulp.lpSum([ft[i][(i,l,t5)] for l in model_line[model_line['model_no']==i]['line_no'] for t5 in Tn[i] if t5<=t3])>=h[i][(i,t3)]*len(model_line[model_line['model_no']==i]['line_no'])
         
             
