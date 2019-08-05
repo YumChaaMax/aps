@@ -15,11 +15,11 @@
     将订单的信息按照型号与交付时间重新划分了新的型号，三个月内的相同型号的点订单放在一起生产。<br />
      以上同时做了一个维，用于计算每个型号在产线的速度（每天都不一样，指数增长）<br />
      num_by_day 是每天该产线该型号生产的产量，连续生产，速度会提高，所以每天产量不是恒定的，是指数增加的 （day_process 是连续生产的天数）<br />
-     
      ![Image text](https://raw.githubusercontent.com/YumChaaMax/aps/master/img/productionSp.jpg)
 2. Mixed Integer模型部分: 423行-598行    <br />
    速度计算使用了piecewise linear     <br />
-    
+    ![Image text](https://github.com/YumChaaMax/aps/blob/master/img/piecewise.jpg)
+  
 
 3. 结果处理
   
