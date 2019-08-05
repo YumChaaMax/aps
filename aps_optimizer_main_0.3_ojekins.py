@@ -473,7 +473,8 @@ for i in modelList:
 #adt.model_total_volume(order_spd[(order_spd['order_id']==o)&(order_spd['line_no']==l)][['day_process','num_by_day']],adt.prod_days(compD[l][o],len(plan_dates),r[l][o]),len(plan_dates))
 #+pulp.lpSum([mp[i]*x[i][(i,j,t)]*(t-g[i][j]) for i in modelList for j in Md[i] for t in T[i][j] if t>g[i][j]])+
 #pulp.lpSum([h[i][(i,t)]*t for i in modelList for t in Tm[i]])
-prob+=pulp.lpSum([0.15*k[i][(i,l,m)]*P[i][l][0][m] for i in modelList for l in model_line[model_line['model_no']==i]['line_no'] for m in P[i][l][0]])
+prob+=pulp.lpSum([0.15*k[i][(i,l,m)]*P[i][l][0][m] for i in modelList for l in model_line[model_line['model_no']==i]['line_no'] for m in P[i][l][0]])+pulp.lpSum([mp[i]*x[i][(i,j,t)]*(t-g[i][j]) for i in modelList for j in Md[i] for t in T[i][j] if t>g[i][j]])
+
 #pulp.lpSum([orderPool['priority'][o]*orderPool['order_type'][o]*\
                   #Csums[l][o] for o in orderList for l in prod_line]) pulp.lpSum([x[i][(i,j,t)]*(t-g[i][j]) for i in modelList for j in Md[i] for t in T[i][j] if t>g[i][j]])
 
@@ -565,7 +566,7 @@ for i in modelList:
     #prob+=Cmax+eps*pulp.lpSum([r[l][o] for l in prod_line])-eps*pulp.lpSum([compD[l][o] for l in prod_line])   
     
 prob.writeLP("APSModel.lp")
-solver=pulp.solvers.COIN_CMD(path='/home/yumchaamax/math_dep/cbc/Cbc-2.9/build/Cbc/src/cbc',threads=32,msg=1,fracGap=0.01)
+solver=pulp.solvers.COIN_CMD(path='/home/yumchaamax/math_dep/cbc/Cbc-2.9/build/Cbc/src/cbc',threads=16,msg=1,fracGap=0.01)
 prob.solve(solver)
 print("Status:", pulp.LpStatus[prob.status])
 
