@@ -6,8 +6,8 @@ phase 1 : orders across the lines
 phase 2: schedule
 @author: Max
 """
-import APS_Data_Trans as adt
-import pandas as pd
+import src.APS_Data_Trans as adt
+import src.preprocess as prep
 import pulp
 #import boto3
 import datetime
@@ -25,4 +25,21 @@ alpha=0.05
 beta=0.95
 #gamma weight of hours in every line
 gamma=0.35
+
+#f only models with more than 2 lines should be in the dicts
+
+model1Pool,model2Pool=prep.pools_1linedays(ModelPool,dp_matrix)
+
+f_comb=prep.get_model2lines(model_line)
+
+k_comb=prep.get_klist(model_line,P)
+
+
+prob=pulp.LpProblem('Phase 1 order across Line',pulp.LpMinimize)
+
+f=pulp.LpVariable.dicts('f',f_comb,0,1,pulp.LpContinuous)
+
+k=pulp.LpVariable.dicts('k',k_comb,0,1,pulp.LpContinuous)
+
+prob+=
 

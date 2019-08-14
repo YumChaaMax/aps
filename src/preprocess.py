@@ -5,11 +5,11 @@ preprocess data needed
 @author: Max
 """
 
-import APS_Data_Trans as adt
+import src.APS_Data_Trans as adt
 import pandas as pd
 import datetime
 
-import data.data_load as d_load
+import src.data.data_load as d_load
 
 def preprocess_orders(start,merge_days,buffer):
     orderPool=d_load.load_orders()
@@ -46,3 +46,43 @@ def preprocess_orders(start,merge_days,buffer):
     
     return orderPool,modelpty
 
+
+
+def get_model2lines(model_line):
+    model2lines=adt.multi_find(model_line)
+    rlt_list=[]
+    for index,row in model2lines.iterrows():
+        rlt_list.append(tuple(row.tolist()))
+    
+    return rlt_list
+
+def get_klist(model_line,P):
+    model2lines=adt.multi_find(model_line)
+    modellist=model2lines['model_no'].unique()
+    k_list=[]
+    for i in modellist:
+        
+        loop_loop=model2lines[model2lines['model_no']==i]['line_no']
+        for l in loop_loop:
+            
+            for item in P[i][l][0]:
+                
+                k_list.append((i,l,item))
+    
+    return k_list            
+
+
+def pools_1linedays(modelpool:pd.DataFrame,dp_matrix:pd.DataFrame):
+    """return model pools 1line and 2lines
+    days of 1-line model"""
+    modelLine=dp_matrix[['model_no','line_no']].drop_duplicates()
+    model2lines=adt.multi_find(modelLine)
+    #model2lines.rename({'model_no':'model_no_1','line_no':'line_no_1'},axis='columns')
+    temppool=modelpool.merge(model2lines,how='left',left_on='model_no',right_on='model_no')
+    model1pool=modelpool[temppool['line_no'].isna()]
+    model2pool=modelpool[temppool['line_no'].isna()==False]
+    model1pool['days']=model1pool['order_num'].apply(lambda x:adt.process_csum(x,dp_matrix[dp_matrix['model_no']==x][['day_process','num_by_day','cum_day']].set_index('day_process')))
+    
+    return model1pool, model2pool
+    
+    
