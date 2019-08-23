@@ -76,13 +76,44 @@ def pools_1linedays(modelpool:pd.DataFrame,dp_matrix:pd.DataFrame):
     """return model pools 1line and 2lines
     days of 1-line model"""
     modelLine=dp_matrix[['model_no','line_no']].drop_duplicates()
+    modelLine.reset_index(drop=True,inplace=True)
     model2lines=adt.multi_find(modelLine)
+    model2ls=model2lines.groupby('model_no')['line_no'].count()
+    model2ls=model2ls.reset_index()
+    model1l=modelLine.merge(model2ls,how='left',left_on='model_no',right_on='model_no')
+    modelTline=modelLine[model1l['line_no_y'].isna()]
     #model2lines.rename({'model_no':'model_no_1','line_no':'line_no_1'},axis='columns')
-    temppool=modelpool.merge(model2lines,how='left',left_on='model_no',right_on='model_no')
+    temppool=modelpool.merge(model2ls,how='left',left_on='model_no',right_on='model_no')
     model1pool=modelpool[temppool['line_no'].isna()]
     model2pool=modelpool[temppool['line_no'].isna()==False]
-    model1pool['days']=model1pool['order_num'].apply(lambda x:adt.process_csum(x,dp_matrix[dp_matrix['model_no']==x][['day_process','num_by_day','cum_day']].set_index('day_process')))
+    model1pool['days']=model1pool.apply(lambda x:adt.process_csum(x['order_num'],dp_matrix[dp_matrix['model_no']==x['model_no']][['day_process','num_by_day','cum_day']].set_index('day_process')),axis=1)
+    model1pool=model1pool.merge(modelTline,how='left',right_on='model_no',left_on='model_no')
     
     return model1pool, model2pool
-    
-    
+
+def get_ftlist(model_line,Tn):
+    modelList=model_line['model_no'].unique().tolist()
+    ft_list=[]
+    for i in modelList:
+        
+        loop_loop=model_line[model_line['model_no']==i]['line_no']
+        for l in loop_loop:
+            for item in Tn[i]:
+                ft_list.append((i,l,item))
+    return ft_list         
+
+def get_zlist(model_line):
+    modelList=model_line['model_no'].unique().tolist()
+    z_comb=[]
+    for i in modelList:
+        #for j in modelList:
+            #if i!=j:
+        
+        loop_loop=model_line[model_line['model_no']==i]['line_no']
+        for l in loop_loop:
+            jmodel=model_line[model_line['line_no']==l]['model_no']
+            
+            for j in jmodel:
+                if i!=j:
+                    z_comb.append((i,j,l))
+    return z_comb

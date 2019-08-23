@@ -362,10 +362,14 @@ def dp_append(df_origin,model_sum:dict):
 def kname_split(series,has_no=True):
     outdf=pd.DataFrame()
     temp_s=series.str.split(pat=',_') 
-    outdf['model']=temp_s.apply(lambda x:x[0])
-    outdf['line']=temp_s.apply(lambda x:x[1])
-    outdf['ped']=temp_s.apply(lambda x:x[2]).str.rstrip('\)')
-    outdf['ped']=outdf['ped'].astype('float')
+    outdf['model']=temp_s.apply(lambda x:x[0].strip('\''))
+    outdf['line']=temp_s.apply(lambda x:x[1].strip('\''))
+    if has_no:
+        outdf['ped']=temp_s.apply(lambda x:x[2]).str.rstrip('\)')
+        outdf['ped']=outdf['ped'].astype('float')
+    else:
+        outdf['line']=outdf['line'].apply(lambda x:x.strip('\'\)'))
+    
     return outdf
 
 def workday_idf(day_date,work_sheet,isback=True):
@@ -392,3 +396,4 @@ def multi_find(modelLine):
     model_multi=pd.DataFrame(linCount[linCount['line_no']>1]['model_no']).merge(modelLine,how='inner',left_on='model_no',right_on='model_no')
     
     return model_multi
+

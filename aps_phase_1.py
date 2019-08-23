@@ -30,6 +30,10 @@ gamma=0.35
 
 model1Pool,model2Pool=prep.pools_1linedays(ModelPool,dp_matrix)
 
+line_occupy=model1Pool.groupby('line_no')['days'].sum()
+
+ft_comb=prep.get_ftlist(modelLine,Tn)
+
 f_comb=prep.get_model2lines(model_line)
 
 k_comb=prep.get_klist(model_line,P)
@@ -41,5 +45,8 @@ f=pulp.LpVariable.dicts('f',f_comb,0,1,pulp.LpContinuous)
 
 k=pulp.LpVariable.dicts('k',k_comb,0,1,pulp.LpContinuous)
 
+ft=pulp.LpVariable.dicts('ft',ft_comb,0,1,pulp.LpInteger)
+
 prob+=
 
+#
